@@ -1,0 +1,16 @@
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+node_modules/
+dist/
+storage/
+.env
+*.pyc
+*.log
+*.out
+*.err
+/_err.txt
+/images/
+/1.jpg
+/2.jpg

@@ -1,0 +1,4 @@
+# Installed in stage 2/4 (heavy). CPU torch wheels:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+speciesnet
+audiocraft

@@ -1,0 +1,18 @@
+:root {
+  --green: #1b6b4f;
+  --bg: #f6f6f5;
+  --border: #e2e2df;
+  --muted: #777;
+  font-family: system-ui, 'Segoe UI', Arial, sans-serif;
+  color: #222;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+h1,
+h2 {
+  margin: 0;
+}
