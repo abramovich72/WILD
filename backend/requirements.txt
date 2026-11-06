@@ -7,3 +7,4 @@ aiofiles
 ruff
 pytest
 httpx
+psutil

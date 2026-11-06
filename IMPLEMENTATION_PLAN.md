@@ -95,7 +95,18 @@ wild/
 - [ ] בדיקות E2E (Playwright) לזרימה מלאה.
 - [ ] טיפול בשגיאות, ניקוי קבצים זמניים, מגבלות גודל.
 - [ ] מדידת דיוק SpeciesNet על דוגמאות מהשטח (בעיקר לילה/IR).
+- [ ] מדידת CPU/RAM מקומית עם `backend/scripts/benchmark_resources.py` על מדיה מייצגת (3 ריצות; הראשונה כוללת טעינת מודל).
 - [ ] נגישות ו-RTL.
+
+### בדיקת צריכת משאבים מקומית
+הכלי `backend/scripts/benchmark_resources.py` מריץ את זיהוי SpeciesNet על פריט מדיה קיים במסד המקומי, ומודד את זמן הריצה, צריכת ה-CPU ושיא ה-RAM של תהליך Python ותהליכי ffmpeg שלו. שלוש הריצות כוללות ריצה ראשונה עם טעינת המודל ולאחריה ריצות חמות; המדידה אינה כוללת את הדפדפן או את עומס ה-Frontend.
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe .\scripts\benchmark_resources.py --media-id 1 --repeats 3 --output .\benchmark.json
+```
+
+יש להחליף את `1` במזהה של פריט מייצג מתוך `storage/wild.db`. הדוח כולל גם את מספר המעבדים והזיכרון הכולל במחשב.
 
 ## שלב 8 – פריסה לענן
 - [ ] Dockerfile ל-backend ול-frontend, ו-docker-compose.
