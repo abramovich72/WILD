@@ -34,6 +34,15 @@ class DriveError(Exception):
         self.message = message
 
 
+class DownloadCancelled(Exception):
+    pass
+
+
+def _raise_if_cancelled(cancel_event: threading.Event | None) -> None:
+    if cancel_event and cancel_event.is_set():
+        raise DownloadCancelled("Google Drive download cancelled")
+
+
 def configured() -> bool:
     return bool(settings.google_client_id and settings.google_client_secret)
 
@@ -164,12 +173,17 @@ def download(
     resource_key: str | None = None,
     on_bytes: Callable[[int], None] | None = None,
     attempts: int = 5,
+    cancel_event: threading.Event | None = None,
 ) -> None:
     """Stream a Drive file to dest, resuming from the bytes already on disk and retrying."""
     last: Exception | None = None
     for attempt in range(attempts):
+        _raise_if_cancelled(cancel_event)
         if attempt:
-            time.sleep(min(2**attempt, 20))
+            if cancel_event and cancel_event.wait(min(2**attempt, 20)):
+                raise DownloadCancelled("Google Drive download cancelled")
+            if not cancel_event:
+                time.sleep(min(2**attempt, 20))
         offset = dest.stat().st_size if dest.exists() else 0
         headers = {"Authorization": f"Bearer {_access_token()}"}
         if offset:
@@ -197,6 +211,7 @@ def download(
                     offset = 0
                 with dest.open("ab" if offset else "wb") as f:
                     for chunk in r.iter_bytes(1024 * 1024):
+                        _raise_if_cancelled(cancel_event)
                         f.write(chunk)
                         if on_bytes:
                             on_bytes(len(chunk))

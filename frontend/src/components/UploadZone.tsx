@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { type MediaItem, uploadFile } from '../api'
+import { MAX_UPLOAD_BYTES, type MediaItem, uploadFile } from '../api'
 
 type Job = { name: string; progress: number; error?: string }
 
@@ -20,6 +20,10 @@ export function UploadZone({ projectId, onUploaded }: Props) {
     for (const file of Array.from(files)) {
       const key = `${file.name}-${file.size}-${Math.random()}`
       patch(key, { name: file.name, progress: 0 })
+      if (file.size > MAX_UPLOAD_BYTES) {
+        patch(key, { error: 'הקובץ חורג מהמגבלה של 50 MB' })
+        continue
+      }
       try {
         const item = await uploadFile(projectId, file, (p) => patch(key, { progress: p }))
         onUploaded(item)
@@ -47,7 +51,7 @@ export function UploadZone({ projectId, onUploaded }: Props) {
         }}
       >
         <strong>גרירת תמונות וסרטונים</strong>
-        <span>או לחיצה לבחירת קבצים מהמחשב</span>
+        <span>או לחיצה לבחירת קבצים מהמחשב (עד 50 MB לקובץ)</span>
         <input
           ref={input}
           type="file"

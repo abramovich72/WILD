@@ -73,9 +73,16 @@ def list_media(project_id: int, session: Session = Depends(get_session)):
         if not m.thumb_name:  # retry thumbnails that failed at upload time
             name = f"{Path(m.stored_name).stem}.jpg"
             src = storage.media_dir(project_id) / m.stored_name
-            if src.exists() and ffmpeg.make_thumbnail(
-                src, storage.thumbs_dir(project_id) / name, m.kind, m.duration
-            ):
+            thumb_path = storage.thumbs_dir(project_id) / name
+            if src.exists():
+                try:
+                    storage.ensure_capacity(storage.THUMBNAIL_RESERVE_BYTES)
+                except storage.StorageQuotaExceeded as e:
+                    raise HTTPException(507, str(e)) from e
+            if src.exists() and ffmpeg.make_thumbnail(src, thumb_path, m.kind, m.duration):
+                if storage.over_quota():
+                    thumb_path.unlink(missing_ok=True)
+                    raise HTTPException(507, "Storage quota exceeded while creating thumbnail")
                 m.thumb_name = name
                 session.add(m)
                 session.commit()
@@ -115,8 +122,16 @@ def media_preview(media_id: int, session: Session = Depends(get_session)):
         return FileResponse(src, filename=m.filename, content_disposition_type="inline")
     dest = storage.previews_dir(m.project_id) / f"{src.stem}.mp4"
     with _preview_lock:
-        if not dest.exists() and not ffmpeg.make_preview(src, dest):
-            raise HTTPException(500, "Could not prepare a preview")
+        if not dest.exists():
+            try:
+                storage.ensure_capacity(0)
+            except storage.StorageQuotaExceeded as e:
+                raise HTTPException(507, str(e)) from e
+            if not ffmpeg.make_preview(src, dest):
+                raise HTTPException(500, "Could not prepare a preview")
+            if storage.over_quota():
+                dest.unlink(missing_ok=True)
+                raise HTTPException(507, "Storage quota exceeded while creating preview")
     return FileResponse(dest, media_type="video/mp4")
 
 
@@ -156,12 +171,15 @@ def init_upload(project_id: int, body: UploadInit, session: Session = Depends(ge
         raise HTTPException(415, "Unsupported file type")
     if body.size <= 0 or body.size > settings.max_upload_bytes:
         raise HTTPException(413, "Invalid file size")
+    storage.cleanup_expired_uploads()
     upload_id = uuid.uuid4().hex
     meta_path, part_path = _upload_paths(upload_id)
     meta = {"project_id": project_id, "filename": Path(body.filename).name,
             "size": body.size, "kind": kind}
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
-    part_path.touch()
+    try:
+        storage.reserve_upload(meta_path, part_path, meta)
+    except storage.StorageQuotaExceeded as e:
+        raise HTTPException(507, str(e)) from e
     return {"upload_id": upload_id, "offset": 0}
 
 
@@ -193,8 +211,14 @@ def complete_upload(upload_id: str, session: Session = Depends(get_session)):
     meta, meta_path, part_path = _load_upload(upload_id)
     if part_path.stat().st_size != meta["size"]:
         raise HTTPException(409, detail={"offset": part_path.stat().st_size})
-    item = storage.ingest(meta["project_id"], meta["filename"], meta["kind"], part_path)
-    meta_path.unlink(missing_ok=True)
+    try:
+        item = storage.ingest(
+            meta["project_id"], meta["filename"], meta["kind"], part_path, meta_path
+        )
+    except storage.StorageQuotaExceeded as e:
+        raise HTTPException(507, str(e)) from e
+    finally:
+        storage.release_reservation(meta_path)
     session.add(item)
     session.commit()
     session.refresh(item)

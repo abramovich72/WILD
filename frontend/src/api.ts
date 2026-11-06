@@ -48,7 +48,12 @@ export type TimelineItem = {
 
 export type Transition = 'none' | 'fade'
 
-export type DriveStatus = { configured: boolean; connected: boolean; email: string | null }
+export type DriveStatus = {
+  enabled: boolean
+  configured: boolean
+  connected: boolean
+  email: string | null
+}
 
 export type DriveItem = {
   id: string
@@ -99,11 +104,15 @@ export const drive = {
       body: JSON.stringify({ project_id: projectId, items, recursive }),
     }).then(driveJson<DriveImportJob>),
   importJob: (id: string) => fetch(`/api/drive/imports/${id}`).then(driveJson<DriveImportJob>),
+  activeImport: () => fetch('/api/drive/imports/active').then(driveJson<DriveImportJob | null>),
+  cancelImport: (id: string) =>
+    fetch(`/api/drive/imports/${id}/cancel`, { method: 'POST' }).then(driveJson<DriveImportJob>),
 }
 
 export type DriveImportJob = {
   id: string
-  status: 'queued' | 'running' | 'done' | 'failed'
+  project_id: number
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   phase: string
   total: number
   done: number
@@ -199,6 +208,8 @@ export const api = {
   previewUrl: (id: number) => `/api/media/${id}/preview`,
   thumbUrl: (id: number) => `/api/media/${id}/thumb`,
 }
+
+export const MAX_UPLOAD_BYTES = 50_000_000
 
 const CHUNK = 8 * 1024 * 1024
 

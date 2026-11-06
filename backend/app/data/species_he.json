@@ -19,7 +19,6 @@
   "hyena": "צבוע",
   "wild boar": "חזיר בר",
   "feral pig": "חזיר בר",
-  "european badger": "גירית אירופית",
   "eurasian badger": "גירית אירופית",
   "badger": "גירית",
   "honey badger": "גירית דבש",
@@ -77,5 +76,12 @@
   "rattus species": "מיני עכברים",  
   "spiny rat family": "משפחת עכברי הקוצים",
   "weasel family": "משפחת החמוסיים",
-  "possum family": "משפחת האופוסומים"
+  "possum family": "משפחת האופוסומים",
+  "diprotodontia order": "סדרת הדיפרוטודונטיים",
+  "suidae family": "משפחת החזיריים",
+  "artiodactyla order": "סדרת הפרסתניים",
+  "herpestes species": "מיני נמיות",
+  "cercopithecidae family": "משפחת הקופים החדשים",
+  "passeriformes order": "סדרת העופות השיריים",
+  "corvidae family": "משפחת העורביים"
 }

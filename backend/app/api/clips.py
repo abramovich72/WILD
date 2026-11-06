@@ -137,6 +137,10 @@ def create_clip(project_id: int, body: ClipIn, session: Session = Depends(get_se
     total += (body.closing_title_seconds if closing_title else 0)
     if total > settings.max_clip_seconds:
         raise HTTPException(422, f"Clip is longer than {settings.max_clip_seconds:.0f} seconds")
+    try:
+        storage.ensure_capacity(1)
+    except storage.StorageQuotaExceeded as e:
+        raise HTTPException(507, str(e)) from e
 
     clip = Clip(
         project_id=project_id,

@@ -92,6 +92,7 @@ def run_job(clip_id: int) -> None:
             closing_title_seconds=spec.get("closing_title_seconds", 3.0),
             on_progress=lambda f: PROGRESS.__setitem__(clip_id, f),
         )
+        storage.ensure_capacity(0)
         meta = ffmpeg.probe(out)
         _finish(
             clip_id, status="done", file_name=name, duration=meta["duration"],

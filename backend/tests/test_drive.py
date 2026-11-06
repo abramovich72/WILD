@@ -1,4 +1,5 @@
 import json
+import threading
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -24,6 +25,7 @@ def sign_in(monkeypatch, expires_in=3600):
 def test_not_configured(client, monkeypatch):
     monkeypatch.setattr(settings, "google_client_id", "")
     assert client.get("/api/drive/status").json() == {
+        "enabled": True,
         "configured": False,
         "connected": False,
         "email": None,
@@ -47,12 +49,38 @@ def test_login_flow(drive, monkeypatch):
     )
     assert r.headers["location"].endswith("?drive=connected")
     assert drive.get("/api/drive/status").json() == {
+        "enabled": True,
         "configured": True,
         "connected": True,
         "email": "a@b.c",
     }
     drive.post("/api/drive/logout")
     assert drive.get("/api/drive/status").json()["connected"] is False
+
+
+def test_drive_disabled(client, monkeypatch):
+    monkeypatch.setattr(settings, "drive_enabled", False)
+    assert client.get("/api/drive/status").json() == {
+        "enabled": False,
+        "configured": False,
+        "connected": False,
+        "email": None,
+    }
+
+    requests = [
+        client.get("/api/drive/auth-url"),
+        client.get("/api/drive/callback", params={"code": "x", "state": "y"}),
+        client.post("/api/drive/logout"),
+        client.get("/api/drive/files"),
+        client.post("/api/drive/resolve", json={"url": "https://drive.google.com/file/d/x"}),
+        client.post(
+            "/api/drive/import",
+            json={"project_id": 1, "items": [{"id": "x", "name": "x.jpg", "kind": "image"}]},
+        ),
+        client.get("/api/drive/imports/nope"),
+        client.get("/api/drive/imported/1"),
+    ]
+    assert all(response.status_code == 503 for response in requests)
 
 
 def test_callback_rejects_unknown_state(drive):
@@ -164,12 +192,44 @@ def test_token_refresh(drive, monkeypatch):
     assert calls == ["refresh_token"]
 
 
+def test_download_can_be_cancelled_mid_stream(tmp_path, monkeypatch):
+    cancel_event = threading.Event()
+    destination = tmp_path / "download.part"
+
+    class FakeResponse:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def iter_bytes(self, _chunk_size):
+            yield b"first"
+            yield b"second"
+
+    monkeypatch.setattr(gdrive.httpx, "stream", lambda *_args, **_kwargs: FakeResponse())
+
+    def cancel_after_first_chunk(_count):
+        cancel_event.set()
+
+    with pytest.raises(gdrive.DownloadCancelled):
+        gdrive.download(
+            "file-id",
+            destination,
+            on_bytes=cancel_after_first_chunk,
+            cancel_event=cancel_event,
+        )
+    assert destination.read_bytes() == b"first"
+
+
 def _wait(client, job_id):
     import time
 
     for _ in range(100):
         job = client.get(f"/api/drive/imports/{job_id}").json()
-        if job["status"] in ("done", "failed"):
+        if job["status"] in ("done", "failed", "cancelled"):
             return job
         time.sleep(0.05)
     raise AssertionError("import did not finish")
@@ -179,7 +239,7 @@ def _fake_ingest(monkeypatch):
     from app.models.media import MediaItem
     from app.services import drive_import
 
-    def ingest(project_id, filename, kind, tmp_path):
+    def ingest(project_id, filename, kind, tmp_path, reservation_path=None):
         size = tmp_path.stat().st_size
         tmp_path.unlink()
         return MediaItem(project_id=project_id, filename=filename, kind=kind,
@@ -207,7 +267,9 @@ def test_import_folder_recursive_and_dedupe(drive, monkeypatch):
         lambda parent, token=None, key=None: {**tree[parent], "next_page_token": None},
     )
 
-    def fake_download(file_id, dest, resource_key=None, on_bytes=None, attempts=5):
+    def fake_download(
+        file_id, dest, resource_key=None, on_bytes=None, attempts=5, cancel_event=None
+    ):
         if file_id == "d":
             raise gdrive.DriveError(403, "Google denied access to this file")
         dest.write_bytes(b"abc")
@@ -240,6 +302,53 @@ def test_import_validation(drive, monkeypatch):
     bad = {"project_id": pid, "items": [{"id": "x", "name": "x", "kind": "other"}]}
     assert drive.post("/api/drive/import", json=bad).status_code == 422
     assert drive.get("/api/drive/imports/nope").status_code == 404
+
+
+def test_only_one_import_runs_and_active_import_can_be_cancelled(drive, monkeypatch):
+    from app.services import drive_import
+
+    _fake_ingest(monkeypatch)
+    monkeypatch.setattr(gdrive, "status", lambda: {"connected": True})
+    started = threading.Event()
+    calls = 0
+
+    def fake_download(_file_id, dest, *_args, cancel_event=None, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            dest.write_bytes(b"partial")
+            started.set()
+            assert cancel_event is not None
+            cancel_event.wait(2)
+            raise gdrive.DownloadCancelled
+        dest.write_bytes(b"abc")
+
+    monkeypatch.setattr(gdrive, "download", fake_download)
+    pid = drive.post("/api/projects", json={"name": "p"}).json()["id"]
+    body = {
+        "project_id": pid,
+        "items": [{"id": "file-1", "name": "a.jpg", "kind": "image", "size": 3}],
+    }
+
+    first = drive.post("/api/drive/import", json=body)
+    assert first.status_code == 202
+    job_id = first.json()["id"]
+    assert started.wait(2)
+    assert drive.get("/api/drive/imports/active").json()["id"] == job_id
+    assert drive.post("/api/drive/import", json=body).status_code == 409
+
+    cancel = drive.post(f"/api/drive/imports/{job_id}/cancel")
+    assert cancel.status_code == 200
+    assert cancel.json()["phase"] == "מבטל הורדה…"
+    cancelled = _wait(drive, job_id)
+    assert cancelled["status"] == "cancelled"
+    assert drive.get("/api/drive/imports/active").json() is None
+    assert not list(drive_import.storage.uploads_dir().glob("*.part"))
+
+    next_job = drive.post("/api/drive/import", json=body)
+    assert next_job.status_code == 202
+    finished = _wait(drive, next_job.json()["id"])
+    assert finished["status"] == "done" and finished["done"] == 1
 
 
 def test_download_resumes_and_retries(tmp_path, monkeypatch):

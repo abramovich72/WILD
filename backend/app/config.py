@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     device: str = "cpu"
     ffmpeg_path: str = ""
     ffprobe_path: str = ""
-    max_upload_bytes: int = 20 * 1024 * 1024 * 1024
+    max_upload_bytes: int = 50_000_000
+    max_storage_bytes: int = 0
+    upload_ttl_seconds: int = 0
 
     detect_country: str = "ISR"
     detect_fps: float = 1.0
@@ -47,6 +49,7 @@ class Settings(BaseSettings):
     detect_merge_gap_seconds: float = 5.0
 
     # Google Drive import (OAuth web client; see IMPLEMENTATION_PLAN stage 6).
+    drive_enabled: bool = True
     google_client_id: str = ""
     google_client_secret: str = ""
     drive_redirect_uri: str = "http://localhost:8010/api/drive/callback"

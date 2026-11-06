@@ -29,7 +29,7 @@ The application is **not yet a public cloud service**. There is no user authenti
 | ORM/database | SQLModel + SQLite |
 | Media processing | FFmpeg and ffprobe |
 | Animal detection | SpeciesNet, with configurable CPU-oriented inference settings |
-| Google integration | Drive API v3 OAuth authorization-code flow with PKCE and `drive.readonly` |
+| Google integration | Drive API v3 OAuth authorization-code flow with PKCE and `drive.readonly`; controlled by `DRIVE_ENABLED` |
 | Background work | In-process Python worker threads and queues |
 | Local development | `run.cmd` launches the backend and Vite frontend |
 
@@ -180,12 +180,18 @@ The React API client and TypeScript response contracts live in `frontend/src/api
 Settings are defined in `backend/app/config.py` and can be overridden with environment variables or `backend/.env`. Common settings include:
 
 - `STORAGE_DIR`
+- `MAX_UPLOAD_BYTES` (50 MB by default and for the private cloud trial; `50000000` bytes)
+- `MAX_STORAGE_BYTES` (0 means unlimited locally; use `150000000000` for a shared 150 GB cloud quota)
+- `UPLOAD_TTL_SECONDS` (0 disables expiry locally; use `86400` for the 24-hour cloud trial cleanup)
 - `DEVICE`
 - `FFMPEG_PATH`, `FFPROBE_PATH`
 - Detection settings such as `DETECT_COUNTRY`, `DETECT_FPS`, and confidence/frame-skip thresholds
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DRIVE_REDIRECT_URI`, `FRONTEND_URL`
+- `DRIVE_ENABLED` (defaults to `true` for local development; set to `false` for the private cloud trial)
 - `PRELOAD_MODEL`
 - `CAPTION_FONT`, `MAX_CLIP_SECONDS`
+
+The shared storage quota counts files under `storage/projects/` and active upload reservations. It does not count the SQLite database or Google OAuth token. Expired partial uploads are removed only when `UPLOAD_TTL_SECONDS` is positive.
 
 Do not paste `.env` values into tickets or docs. Configuration is read at backend startup; restart the backend after changes.
 

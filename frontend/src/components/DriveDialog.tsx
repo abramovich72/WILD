@@ -9,10 +9,14 @@ const ICON = { folder: '📁', image: '🖼', video: '🎞', other: '' }
 
 export function DriveDialog({
   projectId,
+  open,
+  onOpen,
   onImported,
   onClose,
 }: {
   projectId: number
+  open: boolean
+  onOpen: () => void
   onImported: () => void
   onClose: () => void
 }) {
@@ -26,16 +30,26 @@ export function DriveDialog({
   const [loading, setLoading] = useState(false)
   const [imported, setImported] = useState<Set<string>>(new Set())
   const [job, setJob] = useState<DriveImportJob | null>(null)
+  const [activeJobLoaded, setActiveJobLoaded] = useState(false)
   const [recursive, setRecursive] = useState(false)
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null)
 
   const here = path[path.length - 1]
   const running = job?.status === 'queued' || job?.status === 'running'
+  const cancelling = job?.phase === 'מבטל הורדה…'
   const jobId = job?.id
   const onImportedRef = useRef(onImported)
+  const mounted = useRef(true)
+  const wasOpen = useRef(open)
   const lastDone = useRef(0)
   useEffect(() => {
     onImportedRef.current = onImported
   })
+
+  useEffect(() => {
+    if (wasOpen.current && !open) setSelected(new Map())
+    wasOpen.current = open
+  }, [open])
 
   const load = useCallback(async (crumb: Crumb, token?: string | null) => {
     setLoading(true)
@@ -52,16 +66,40 @@ export function DriveDialog({
   }, [])
 
   useEffect(() => {
+    mounted.current = true
     drive
       .status()
       .then((s) => {
+        if (!mounted.current) return
         setStatus(s)
         if (s.connected) {
           void load(ROOT)
           void drive.imported(projectId).then((ids) => setImported(new Set(ids)))
         }
+        if (s.enabled) {
+          void drive.activeImport().then((j) => {
+            if (!mounted.current || !j) return
+            setJob(j)
+            setDismissedJobId(null)
+            lastDone.current = j.done
+            onImportedRef.current()
+          })
+            .catch((e: Error) => {
+              if (mounted.current) setError(e.message)
+            })
+            .finally(() => {
+              if (mounted.current) setActiveJobLoaded(true)
+            })
+        } else {
+          setActiveJobLoaded(true)
+        }
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => {
+        if (mounted.current) setError(e.message)
+      })
+    return () => {
+      mounted.current = false
+    }
   }, [load, projectId])
 
   useEffect(() => {
@@ -75,8 +113,8 @@ export function DriveDialog({
             lastDone.current = j.done
             onImportedRef.current()
           }
-          if (j.status === 'done' || j.status === 'failed') {
-            void drive.imported(projectId).then((ids) => setImported(new Set(ids)))
+          if (j.status === 'done' || j.status === 'failed' || j.status === 'cancelled') {
+            void drive.imported(j.project_id).then((ids) => setImported(new Set(ids)))
           }
         })
         .catch((e: Error) => setError(e.message))
@@ -87,11 +125,28 @@ export function DriveDialog({
   async function startImport() {
     setError('')
     try {
-      setJob(await drive.startImport(projectId, [...selected.values()], recursive))
+      const newJob = await drive.startImport(projectId, [...selected.values()], recursive)
+      setJob(newJob)
+      setDismissedJobId(null)
+      lastDone.current = newJob.done
       setSelected(new Map())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה')
     }
+  }
+
+  async function cancelImport() {
+    if (!job || !running || cancelling) return
+    setError('')
+    try {
+      setJob(await drive.cancelImport(job.id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'שגיאה')
+    }
+  }
+
+  function dismissJob() {
+    if (job && !running) setDismissedJobId(job.id)
   }
 
   function selectAllHere() {
@@ -103,6 +158,7 @@ export function DriveDialog({
   }
 
   function go(next: Crumb[]) {
+    setSelected(new Map())
     setPath(next)
     void load(next[next.length - 1])
   }
@@ -117,7 +173,7 @@ export function DriveDialog({
 
   async function logout() {
     await drive.logout()
-    setStatus({ configured: true, connected: false, email: null })
+    setStatus({ enabled: true, configured: true, connected: false, email: null })
     setItems([])
     setSelected(new Map())
   }
@@ -129,7 +185,7 @@ export function DriveDialog({
       if (item.kind === 'folder') {
         go([{ id: item.id, name: item.name, key: item.resource_key }])
       } else {
-        setSelected((s) => new Map(s).set(item.id, item))
+        setSelected(new Map([[item.id, item]]))
       }
       setLink('')
     } catch (e) {
@@ -147,7 +203,8 @@ export function DriveDialog({
   const enter = (it: DriveItem) => go([...path, { id: it.id, name: it.name, key: it.resource_key }])
 
   return (
-    <div className="modal-back" onClick={onClose}>
+    <>
+    {open && <div className="modal-back" onClick={onClose}>
       <div className="modal" role="dialog" aria-label="ייבוא מ-Google Drive" onClick={(e) => e.stopPropagation()}>
         <div className="row between">
           <h2>ייבוא מ-Google Drive</h2>
@@ -156,14 +213,18 @@ export function DriveDialog({
           </button>
         </div>
 
-        {status && !status.configured && (
+        {status && !status.enabled && (
+          <p className="muted small">ייבוא מ-Google Drive כבוי בהגדרות השרת.</p>
+        )}
+
+        {status?.enabled && !status.configured && (
           <p className="error small">
             החיבור ל-Google לא הוגדר. יש להוסיף GOOGLE_CLIENT_ID ו-GOOGLE_CLIENT_SECRET לקובץ
             backend\.env ולהפעיל מחדש את השרת.
           </p>
         )}
 
-        {status?.configured && !status.connected && (
+        {status?.enabled && status.configured && !status.connected && (
           <div className="drive-login">
             <p className="muted small">התחברו לחשבון Google כדי לדפדף בקבצים (הרשאת קריאה בלבד).</p>
             <button className="primary" onClick={() => void login()}>
@@ -172,13 +233,13 @@ export function DriveDialog({
           </div>
         )}
 
-        {status?.connected && (
+        {status?.enabled && status.connected && (
           <>
             <div className="row between small">
               <span className="muted" dir="ltr">
                 {status.email}
               </span>
-              <button className="filter" onClick={() => void logout()}>
+              <button className="filter" disabled={running} onClick={() => void logout()}>
                 התנתקות
               </button>
             </div>
@@ -223,7 +284,7 @@ export function DriveDialog({
                     <input
                       type="checkbox"
                       checked={selected.has(it.id)}
-                      disabled={running || imported.has(it.id)}
+                      disabled={running || !activeJobLoaded || imported.has(it.id)}
                       onChange={() => toggle(it)}
                     />
                     <span>{ICON[it.kind]}</span>{' '}
@@ -258,6 +319,9 @@ export function DriveDialog({
                         {job.current ? `: ${job.current}` : ''}
                       </span>
                     </div>
+                    <button className="filter" disabled={cancelling} onClick={() => void cancelImport()}>
+                      {cancelling ? 'מבטל…' : 'הפסק הורדה'}
+                    </button>
                     <progress
                       className="drive-progress"
                       max={job.total || 1}
@@ -267,6 +331,10 @@ export function DriveDialog({
                       {job.done}/{job.total || '…'} קבצים · הורדו {formatSize(job.bytes_done)}
                     </span>
                   </>
+                ) : job.status === 'cancelled' ? (
+                  <div>ההורדה בוטלה: יובאו {job.done}, דולגו {job.skipped}, נכשלו {job.failed}</div>
+                ) : job.status === 'failed' ? (
+                  <div>הייבוא נכשל: יובאו {job.done}, דולגו {job.skipped}, נכשלו {job.failed}</div>
                 ) : (
                   <div>
                     הסתיים: יובאו {job.done}, דולגו (כבר יובאו) {job.skipped}, נכשלו {job.failed}
@@ -282,22 +350,29 @@ export function DriveDialog({
 
             <div className="row between drive-foot">
               <span className="small muted">
-                {selected.size} נבחרו
+                {selected.size} נבחרו בתיקייה הנוכחית
+                <button
+                  className="linklike"
+                  disabled={selected.size === 0 || running}
+                  onClick={() => setSelected(new Map())}
+                >
+                  נקה בחירה
+                </button>
                 <label className="row">
                   <input
                     type="checkbox"
                     checked={recursive}
-                    disabled={running}
+                    disabled={running || !activeJobLoaded}
                     onChange={(e) => setRecursive(e.target.checked)}
                   />
                   כולל תתי-תיקיות
                 </label>
               </span>
               <span className="row">
-                <button className="filter" disabled={running || !items.some((i) => i.kind !== 'folder')} onClick={selectAllHere}>
+                <button className="filter" disabled={running || !activeJobLoaded || !items.some((i) => i.kind !== 'folder')} onClick={selectAllHere}>
                   בחר את כל הקבצים כאן
                 </button>
-                <button className="primary" disabled={running || selected.size === 0} onClick={() => void startImport()}>
+                <button className="primary" disabled={running || !activeJobLoaded || selected.size === 0} onClick={() => void startImport()}>
                   ייבוא
                 </button>
               </span>
@@ -307,6 +382,49 @@ export function DriveDialog({
 
         {error && <p className="error small">{error}</p>}
       </div>
-    </div>
+    </div>}
+    {!open && job && dismissedJobId !== job.id && (
+      <div className="drive-import-toast small" role="status" aria-live="polite">
+        {running ? (
+          <>
+            <div className="drive-job-heading">
+              <span className="drive-spinner" aria-hidden="true" />
+              <strong>ייבוא מ-Drive נמשך</strong>
+            </div>
+            <span>{job.phase}{job.current ? `: ${job.current}` : ''}</span>
+            <progress
+              className="drive-progress"
+              max={job.total || 1}
+              value={job.total ? job.done : undefined}
+            />
+            <span className="muted">
+              {job.done}/{job.total || '…'} קבצים · הורדו {formatSize(job.bytes_done)}
+            </span>
+            <div className="row between">
+              <button className="linklike" onClick={onOpen}>הצג חלונית</button>
+              <button className="filter" disabled={cancelling} onClick={() => void cancelImport()}>
+                {cancelling ? 'מבטל…' : 'הפסק הורדה'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <strong>
+              {job.status === 'cancelled'
+                ? 'ייבוא מ-Drive בוטל'
+                : job.status === 'failed'
+                  ? 'ייבוא מ-Drive נכשל'
+                  : 'ייבוא מ-Drive הסתיים'}
+            </strong>
+            <span>יובאו {job.done}, דולגו {job.skipped}, נכשלו {job.failed}</span>
+            <div className="row between">
+              <button className="linklike" onClick={onOpen}>הצג פרטים</button>
+              <button className="icon" aria-label="סגירת הודעת הייבוא" onClick={dismissJob}>✕</button>
+            </div>
+          </>
+        )}
+      </div>
+    )}
+    </>
   )
 }

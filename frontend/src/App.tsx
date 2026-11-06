@@ -222,37 +222,40 @@ function App() {
       </nav>
 
       <div className="page">
-        {showDrive && (
-          <DriveDialog
-            projectId={project.id}
-            onImported={() => void refresh(project.id)}
-            onClose={() => {
-              setShowDrive(false)
-              history.replaceState(null, '', location.pathname)
-            }}
-          />
-        )}
+        <DriveDialog
+          projectId={project.id}
+          open={showDrive}
+          onOpen={() => setShowDrive(true)}
+          onImported={() => void refresh(project.id)}
+          onClose={() => {
+            setShowDrive(false)
+            history.replaceState(null, '', location.pathname)
+          }}
+        />
         <header className="head">
           <div className="title-block">
-            <div className="breadcrumb">הפרויקטים שלי / 01</div>
-            {editing ? (
-              <input
-                className="title-input"
-                autoFocus
-                defaultValue={project.name}
-                onBlur={(e) => void rename(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-              />
-            ) : (
-              <h1>
-                {project.name}
-                <button className="pencil" onClick={() => setEditing(true)} aria-label="שינוי שם">
-                  ✎
-                </button>
-              </h1>
-            )}
-            <div className="muted small">
-              {items.length} קבצים · {formatDuration(length)}
+            <img className="brand-logo" src="/wild-clips-logo.png" alt="WILD Clips" />
+            <div>
+              <div className="breadcrumb">הפרויקטים שלי / 01</div>
+              {editing ? (
+                <input
+                  className="title-input"
+                  autoFocus
+                  defaultValue={project.name}
+                  onBlur={(e) => void rename(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                />
+              ) : (
+                <h1>
+                  {project.name}
+                  <button className="pencil" onClick={() => setEditing(true)} aria-label="שינוי שם">
+                    ✎
+                  </button>
+                </h1>
+              )}
+              <div className="muted small">
+                {items.length} קבצים · {formatDuration(length)}
+              </div>
             </div>
           </div>
           <div className="head-actions">
