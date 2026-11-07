@@ -115,7 +115,7 @@ def test_image_detection_rerun_and_corrections(client, tmp_path, fake_model):
     assert client.get(f"/api/projects/{pid}/media").json()[0]["detect_status"] == "pending"
 
     r = client.post(f"/api/projects/{pid}/detect", json={})
-    assert r.json() == {"queued": 1, "skipped": 0}
+    assert r.json() == {"queued": 1, "skipped": 0, "queued_ids": [mid]}
     wait_status(client, pid, mid, {"done"})
     dets = client.get(f"/api/projects/{pid}/detections").json()
     assert len(dets) == 1
@@ -126,7 +126,11 @@ def test_image_detection_rerun_and_corrections(client, tmp_path, fake_model):
 
     # already done -> skipped, model not called again
     calls = fake_model["calls"]
-    assert client.post(f"/api/projects/{pid}/detect", json={}).json() == {"queued": 0, "skipped": 1}
+    assert client.post(f"/api/projects/{pid}/detect", json={}).json() == {
+        "queued": 0,
+        "skipped": 1,
+        "queued_ids": [],
+    }
     assert fake_model["calls"] == calls
 
     # manual correction survives a forced re-run without duplicating

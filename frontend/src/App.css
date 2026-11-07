@@ -180,7 +180,7 @@ button.primary:disabled {
 /* 3 column layout: media (right) | center | settings (left) in RTL */
 .layout {
   display: grid;
-  grid-template-columns: 370px minmax(0, 1fr) 270px;
+  grid-template-columns: 480px minmax(0, 1fr) 270px;
   gap: 16px;
   align-items: start;
 }
