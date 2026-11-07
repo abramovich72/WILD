@@ -93,6 +93,7 @@ def list_media(project_id: int, session: Session = Depends(get_session)):
 def delete_media(media_id: int, session: Session = Depends(get_session)):
     m = _media(session, media_id)
     (storage.media_dir(m.project_id) / m.stored_name).unlink(missing_ok=True)
+    (storage.media_dir(m.project_id) / f"{Path(m.stored_name).stem}.fixed.mkv").unlink(missing_ok=True)
     if m.thumb_name:
         (storage.thumbs_dir(m.project_id) / m.thumb_name).unlink(missing_ok=True)
     (storage.previews_dir(m.project_id) / f"{Path(m.stored_name).stem}.mp4").unlink(missing_ok=True)

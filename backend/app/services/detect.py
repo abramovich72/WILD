@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import settings
+from .ffmpeg import try_remux_corrupt_avi
 
 log = logging.getLogger("uvicorn.error")
 
@@ -145,12 +146,25 @@ def frame_diff(a: Path, b: Path) -> float:
 
 def extract_frames(video: Path, out_dir: Path, fps: float) -> list[tuple[float, Path]]:
     pattern = out_dir / "f_%05d.jpg"
+    target = video
     cmd = [
-        settings.ffmpeg_path, "-y", "-v", "error", "-i", str(video),
+        settings.ffmpeg_path, "-y", "-v", "error", "-i", str(target),
         "-vf", f"fps={fps},scale='min(1280,iw)':-2,format=yuvj420p",
         "-q:v", "3", str(pattern),
     ]
-    subprocess.run(cmd, capture_output=True, timeout=600, check=True)
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=600, check=True)
+    except (subprocess.SubprocessError, OSError):
+        fixed = try_remux_corrupt_avi(video)
+        if fixed:
+            fallback_cmd = [
+                settings.ffmpeg_path, "-y", "-v", "error", "-i", str(fixed),
+                "-vf", f"fps={fps},scale='min(1280,iw)':-2,format=yuvj420p",
+                "-q:v", "3", str(pattern),
+            ]
+            subprocess.run(fallback_cmd, capture_output=True, timeout=600, check=True)
+        else:
+            raise
     files = sorted(out_dir.glob("f_*.jpg"))
     return [(i / fps, p) for i, p in enumerate(files)]
 

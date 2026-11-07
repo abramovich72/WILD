@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     device: str = "cpu"
     ffmpeg_path: str = ""
     ffprobe_path: str = ""
+    mkvmerge_path: str = ""
     max_upload_bytes: int = 50_000_000
     max_storage_bytes: int = 0
     upload_ttl_seconds: int = 0
@@ -67,6 +68,7 @@ class Settings(BaseSettings):
         self.storage_dir = Path(self.storage_dir).resolve()
         self.ffmpeg_path = self.ffmpeg_path or _find("ffmpeg")
         self.ffprobe_path = self.ffprobe_path or _find("ffprobe")
+        self.mkvmerge_path = self.mkvmerge_path or _find("mkvmerge")
         self.caption_font = self.caption_font or _find_font()
 
 

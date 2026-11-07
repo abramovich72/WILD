@@ -141,3 +141,26 @@ def test_avi_gets_mp4_preview(client, tmp_path):
     item2 = _upload(client, pid, "v.mp4", mp4.read_bytes()).json()
     assert client.get(f"/api/media/{item2['id']}/preview").content == mp4.read_bytes()
     assert client.delete(f"/api/media/{item['id']}").status_code == 204
+
+
+def test_corrupt_avi_fallback(client, tmp_path, monkeypatch):
+    """Test that when ffmpeg fails on a corrupt AVI, try_remux_corrupt_avi fallback is attempted."""
+    pid = client.post("/api/projects", json={"name": "corrupt_test"}).json()["id"]
+    avi = tmp_path / "bad.avi"
+    _make_video(avi)
+    item = _upload(client, pid, "bad.avi", avi.read_bytes()).json()
+
+    # Mock try_remux_corrupt_avi to verify it gets called when make_preview fails
+    from app.services import ffmpeg
+    called = []
+    orig_remux = ffmpeg.try_remux_corrupt_avi
+
+    def mock_remux(p):
+        called.append(p)
+        return orig_remux(p)
+
+    monkeypatch.setattr(ffmpeg, "try_remux_corrupt_avi", mock_remux)
+    r = client.get(f"/api/media/{item['id']}/preview")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "video/mp4"
+    assert client.delete(f"/api/media/{item['id']}").status_code == 204

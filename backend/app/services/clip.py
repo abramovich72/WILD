@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import settings
+from .ffmpeg import try_remux_corrupt_avi
 
 WIDTH, HEIGHT, FPS = 1280, 720, 30
 MIN_PIECE = 1.0
@@ -166,11 +167,19 @@ def segment_filter(
 
 def segment_cmd(seg: Segment, out: Path, *, caption_file: Path | None, fade: bool) -> list[str]:
     cmd = [settings.ffmpeg_path, "-y", "-v", "error"]
+    src_path = seg.path
     if seg.kind == "image":
-        cmd += ["-loop", "1", "-framerate", str(FPS), "-i", str(seg.path), "-t", f"{seg.duration:.3f}"]
+        cmd += ["-loop", "1", "-framerate", str(FPS), "-i", str(src_path), "-t", f"{seg.duration:.3f}"]
     else:
+        # Check if corrupt AVI and use fixed MKV if available
+        if src_path.suffix.lower() == ".avi":
+            fixed = src_path.with_suffix(".fixed.mkv")
+            if not fixed.exists():
+                fixed = try_remux_corrupt_avi(src_path)
+            if fixed and fixed.exists():
+                src_path = fixed
         # -t before -i stops reading right after the segment instead of decoding the whole file.
-        cmd += ["-t", f"{seg.end + 1:.3f}", "-i", str(seg.path)]
+        cmd += ["-t", f"{seg.end + 1:.3f}", "-i", str(src_path)]
     cmd += [
         "-vf",
         segment_filter(
