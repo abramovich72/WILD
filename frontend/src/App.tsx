@@ -36,7 +36,6 @@ function App() {
   const [error, setError] = useState('')
   const [detections, setDetections] = useState<Detection[]>([])
   const [progress, setProgress] = useState<Record<number, number | null>>({})
-  const [detectionBatch, setDetectionBatch] = useState<number[]>([])
   const [seek, setSeek] = useState<{ time: number; n: number } | null>(null)
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [captions, setCaptions] = useState(true)
@@ -83,8 +82,7 @@ function App() {
   async function startDetection(force: boolean, ids?: number[]) {
     if (!project) return
     try {
-      const result = await api.detect(project.id, { media_ids: ids, force })
-      setDetectionBatch(result.queued_ids)
+      await api.detect(project.id, { media_ids: ids, force })
       listen(project.id)
     } catch {
       setError('לא ניתן להתחבר לשרת')
@@ -153,12 +151,6 @@ function App() {
     (m) => m.detect_status === 'pending' || m.detect_status === 'failed',
   ).length
   const detectionTargets = checked.size > 0 ? [...checked] : selected ? [selected.id] : []
-  const detectionBatchItems = items.filter((m) => detectionBatch.includes(m.id))
-  const detectionBatchDone = detectionBatchItems.filter((m) => m.detect_status === 'done').length
-  const detectionBatchFailed = detectionBatchItems.filter(
-    (m) => m.detect_status === 'failed',
-  ).length
-  const detectionBatchCompleted = detectionBatchDone + detectionBatchFailed
 
   async function rename(name: string) {
     setEditing(false)
@@ -314,12 +306,6 @@ function App() {
                     : `${items.filter((m) => m.detect_status === 'done').length}/${items.length} זוהו`}
                 </span>
               </div>
-              {detectionBatch.length > 0 && (
-                <span className="muted small" role="status">
-                  {detectionBatchCompleted}/{detectionBatch.length} הושלמו · {detectionBatchDone} זוהו
-                  {detectionBatchFailed > 0 && ` · ${detectionBatchFailed} נכשלו`}
-                </span>
-              )}
               {running && (
                 <div className="bar">
                   <i style={{ width: `${Math.round((Object.values(progress).find((p) => p != null) ?? 0) * 100)}%` }} />

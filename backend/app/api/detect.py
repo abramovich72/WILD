@@ -41,21 +41,18 @@ def start_detection(project_id: int, body: DetectIn, session: Session = Depends(
     q = select(MediaItem).where(MediaItem.project_id == project_id)
     if body.media_ids is not None:
         q = q.where(MediaItem.id.in_(body.media_ids))
-    queued_ids: list[int] = []
-    skipped = 0
+    queued = skipped = 0
     for m in session.exec(q.order_by(MediaItem.id)).all():
         if m.detect_status in ACTIVE or (m.detect_status == "done" and not body.force):
             skipped += 1
             continue
-        if m.id is None:
-            raise HTTPException(500, "Media item has no ID")
         m.detect_status = "queued"
         m.detect_error = None
         session.add(m)
         session.commit()
         jobs.enqueue(jobs.Job(m.id, body.keep_corrections))
-        queued_ids.append(m.id)
-    return {"queued": len(queued_ids), "skipped": skipped, "queued_ids": queued_ids}
+        queued += 1
+    return {"queued": queued, "skipped": skipped}
 
 
 @router.get("/projects/{project_id}/detections")

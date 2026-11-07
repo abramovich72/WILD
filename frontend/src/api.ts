@@ -168,7 +168,7 @@ export const api = {
   },
   detect: (projectId: number, body: { media_ids?: number[]; force?: boolean; keep_corrections?: boolean }) =>
     fetch(`/api/projects/${projectId}/detect`, send('POST', body)).then(
-      json<{ queued: number; skipped: number; queued_ids: number[] }>,
+      json<{ queued: number; skipped: number }>,
     ),
   detections: (projectId: number) =>
     fetch(`/api/projects/${projectId}/detections`).then(json<Detection[]>),

@@ -531,6 +531,10 @@ button.primary:disabled {
   font-size: 0.75rem;
 }
 
+.upload-summary {
+  margin: 8px 0 0;
+}
+
 .job progress {
   width: 100px;
   accent-color: var(--green);
