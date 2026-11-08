@@ -9,7 +9,6 @@ import {
   type TimelineItem,
   type Transition,
 } from './api'
-import { formatDuration } from './format'
 import { ClipsPanel } from './components/ClipsPanel'
 import { DetectionsPanel } from './components/DetectionsPanel'
 import { DetectionEditor } from './components/DetectionEditor'
@@ -269,7 +268,7 @@ function App() {
                 </h1>
               )}
               <div className="muted small">
-                {items.length} קבצים · {formatDuration(length)}
+                {items.length} קבצים
               </div>
             </div>
           </div>
