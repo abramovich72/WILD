@@ -44,6 +44,36 @@ def test_parse_prediction_categories_and_threshold():
     assert parse_prediction({"failures": ["x"], "detections": [{"conf": 1}]}, 0.2) == []
 
 
+def test_image_detection_keeps_only_highest_confidence_result(tmp_path):
+    image = tmp_path / "a.jpg"
+    prediction = {
+        "detections": [
+            {
+                "category": "1",
+                "conf": 0.9,
+                "bbox": [0.1, 0.2, 0.3, 0.4],
+                "processed_classification": {"class": JACKAL, "score": 0.8},
+            },
+            {
+                "category": "1",
+                "conf": 0.8,
+                "bbox": [0.5, 0.2, 0.2, 0.3],
+                "processed_classification": {
+                    "class": "u;mammalia;carnivora;canidae;canis;lupus;wolf",
+                    "score": 0.95,
+                },
+            },
+        ]
+    }
+
+    events = detect.analyze_image(image, lambda paths: [prediction])
+
+    assert len(events) == 1
+    assert events[0].species == "wolf"
+    assert events[0].conf == 0.95
+    assert events[0].box == (0.5, 0.2, 0.2, 0.3)
+
+
 def test_merge_events_groups_by_gap_and_species():
     fox = FrameDet("fox", 0.5, (0, 0, 1, 1))
     best = FrameDet("fox", 0.9, (0.5, 0.5, 0.1, 0.1))

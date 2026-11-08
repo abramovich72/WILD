@@ -216,7 +216,10 @@ def analyze_image(
 ) -> list[Event]:
     classify_fn = classify_fn or classify
     pred = classify_fn([path])[0]
-    return image_events(parse_prediction(pred, settings.detect_min_conf))
+    detections = parse_prediction(pred, settings.detect_min_conf)
+    if not detections:
+        return []
+    return image_events([max(detections, key=lambda detection: detection.conf)])
 
 
 def analyze_video(
