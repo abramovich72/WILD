@@ -367,6 +367,50 @@ test('filters detections that have no identified species', async ({ page }) => {
   await expect(page.locator('.det-main')).toHaveCount(3)
 })
 
+test('shows the unidentified filter with a zero count without including generic animal', async ({
+  page,
+}) => {
+  const state = await mockApi(page, [mediaItem(1, 'animal.jpg', 'image')])
+  state.detections = [
+    {
+      id: 1,
+      media_id: 1,
+      species: 'animal',
+      display: 'חיה',
+      confidence: 0.9,
+      source: 'speciesnet',
+      start_time: null,
+      end_time: null,
+      box_x: 0.2,
+      box_y: 0.2,
+      box_w: 0.4,
+      box_h: 0.4,
+      corrected: false,
+    },
+  ]
+  await openApp(page)
+
+  const unidentifiedFilter = page.getByRole('button', { name: 'לא זוהו · 0' })
+  await expect(unidentifiedFilter).toBeVisible()
+  await unidentifiedFilter.click()
+  await expect(page.locator('.det-main')).toHaveCount(0)
+  await expect(page.getByText('לא נמצאו זיהויים התואמים לחיפוש.')).toBeVisible()
+})
+
+test('lists completed media with no detections under unidentified', async ({ page }) => {
+  await mockApi(page, [mediaItem(1, 'no-detection.jpg', 'image', 'done')])
+  await openApp(page)
+
+  await page.getByRole('button', { name: 'לא זוהו · 1' }).click()
+  const result = page.locator('.det-main')
+  await expect(result).toHaveCount(1)
+  await expect(result).toContainText('לא זוהה')
+  await expect(result).toContainText('no-detection.jpg')
+  await expect(page.getByRole('button', { name: 'עריכת זיהוי' })).toHaveCount(0)
+  await result.click()
+  await expect(page.locator('.preview .meta strong')).toHaveText('no-detection.jpg')
+})
+
 test('creates and edits a manual detection with custom species and video times', async ({
   page,
 }) => {

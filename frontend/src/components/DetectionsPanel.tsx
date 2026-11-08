@@ -25,9 +25,13 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
   const sortedCounts = [...counts].sort(
     ([a, countA], [b, countB]) => countB - countA || a.localeCompare(b, 'he'),
   )
-  const unidentifiedCount = detections.filter((d) =>
-    UNIDENTIFIED_SPECIES.has(d.species.trim().toLocaleLowerCase()),
-  ).length
+  const mediaWithDetections = new Set(detections.map((d) => d.media_id))
+  const unidentifiedMedia = items.filter(
+    (item) => item.detect_status === 'done' && !mediaWithDetections.has(item.id),
+  )
+  const unidentifiedCount =
+    detections.filter((d) => UNIDENTIFIED_SPECIES.has(d.species.trim().toLocaleLowerCase()))
+      .length + unidentifiedMedia.length
   const query = search.trim().toLocaleLowerCase()
   const matchingCounts = sortedCounts.filter(([name]) =>
     name.toLocaleLowerCase().includes(query),
@@ -49,6 +53,7 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
           : d.display === species)) &&
       (!query || d.display.toLocaleLowerCase().includes(query)),
   )
+  const shownUnidentifiedMedia = species === UNIDENTIFIED_FILTER ? unidentifiedMedia : []
 
   function toggle() {
     setCollapsed((c) => {
@@ -65,7 +70,7 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
         </h3>
         <span className="muted small">{detections.length} זיהויים</span>
       </button>
-      {collapsed ? null : detections.length === 0 ? (
+      {collapsed ? null : detections.length === 0 && unidentifiedMedia.length === 0 ? (
         <p className="muted small">אין זיהויים עדיין. לחצו על ״זהה חיות״ בפאנל המדיה.</p>
       ) : (
         <>
@@ -92,16 +97,15 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
               >
                 הכל · {detections.length}
               </button>
-              {unidentifiedCount > 0 && (
-                <button
-                  className={`filter${species === UNIDENTIFIED_FILTER ? ' active' : ''}`}
-                  onClick={() =>
-                    setSpecies(species === UNIDENTIFIED_FILTER ? null : UNIDENTIFIED_FILTER)
-                  }
-                >
-                  לא זוהו · {unidentifiedCount}
-                </button>
-              )}
+              <button
+                className={`filter${species === UNIDENTIFIED_FILTER ? ' active' : ''}`}
+                onClick={() => {
+                  setSpecies(species === UNIDENTIFIED_FILTER ? null : UNIDENTIFIED_FILTER)
+                  setSearch('')
+                }}
+              >
+                לא זוהו · {unidentifiedCount}
+              </button>
               {visibleCounts.map(([name, n]) => (
                 <button
                   key={name}
@@ -123,7 +127,7 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
             )}
           </div>
           <p className="muted small">גררו זיהויים לציר הזמן כדי להוסיף אותם.</p>
-          {shown.length === 0 ? (
+          {shown.length === 0 && shownUnidentifiedMedia.length === 0 ? (
             <p className="muted small">לא נמצאו זיהויים התואמים לחיפוש.</p>
           ) : (
             <ul className="det-list">
@@ -168,6 +172,16 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
                     }}
                   >
                     ✕
+                  </button>
+                </li>
+              ))}
+              {shownUnidentifiedMedia.map((item) => (
+                <li key={`unidentified-${item.id}`} className="det">
+                  <button className="det-main" onClick={() => onOpen(item.id, null)}>
+                    <strong>לא זוהה</strong>
+                    <span className="muted small" dir="ltr">
+                      {item.filename}
+                    </span>
                   </button>
                 </li>
               ))}
