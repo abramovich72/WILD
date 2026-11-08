@@ -22,6 +22,7 @@ export type Detection = {
   species: string
   display: string
   confidence: number
+  source: 'speciesnet' | 'manual'
   start_time: number | null
   end_time: number | null
   box_x: number | null
@@ -30,6 +31,8 @@ export type Detection = {
   box_h: number | null
   corrected: boolean
 }
+
+export type SpeciesOption = { species: string; display: string }
 
 export type DetectProgress = {
   id: number
@@ -172,6 +175,15 @@ export const api = {
     ),
   detections: (projectId: number) =>
     fetch(`/api/projects/${projectId}/detections`).then(json<Detection[]>),
+  species: () => fetch('/api/species').then(json<SpeciesOption[]>),
+  createDetection: (
+    mediaId: number,
+    body: { species: string; start_time: number | null; end_time: number | null },
+  ) => fetch(`/api/media/${mediaId}/detections`, send('POST', body)).then(json<Detection>),
+  updateDetection: (
+    id: number,
+    body: { species?: string; start_time?: number | null; end_time?: number | null },
+  ) => fetch(`/api/detections/${id}`, send('PATCH', body)).then(json<Detection>),
   correctDetection: (id: number, species: string) =>
     fetch(`/api/detections/${id}`, send('PATCH', { species })).then(json<Detection>),
   deleteDetection: async (id: number) => {

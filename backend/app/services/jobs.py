@@ -89,7 +89,7 @@ def _save_results(job: Job, events: list[detect.Event]) -> None:
         existing = s.exec(select(Detection).where(Detection.media_id == job.media_id)).all()
         kept: list[detect.Event] = []
         for d in existing:
-            if job.keep_corrections and d.corrected:
+            if d.source == "manual" or (job.keep_corrections and d.corrected):
                 box = (d.box_x, d.box_y, d.box_w, d.box_h)
                 kept.append(
                     detect.Event(
@@ -100,7 +100,15 @@ def _save_results(job: Job, events: list[detect.Event]) -> None:
             else:
                 s.delete(d)
         for e in events:
-            if any(detect.events_overlap(e, k) for k in kept):
+            if any(
+                detect.events_overlap(e, k)
+                or (
+                    e.start is None
+                    and k.start is None
+                    and e.species.casefold() == k.species.casefold()
+                )
+                for k in kept
+            ):
                 continue
             bx, by, bw, bh = e.box or (None, None, None, None)
             s.add(

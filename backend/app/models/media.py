@@ -35,6 +35,7 @@ class Detection(SQLModel, table=True):
     media_id: int = Field(foreign_key="mediaitem.id", index=True)
     species: str  # English common name, or "human" / "vehicle" / "animal"
     confidence: float
+    source: str = "speciesnet"  # speciesnet | manual
     start_time: float | None = None  # seconds; None for images
     end_time: float | None = None
     # Relative [x, y, w, h] of the most confident frame in the event.

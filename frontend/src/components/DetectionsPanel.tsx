@@ -8,10 +8,11 @@ type Props = {
   detections: Detection[]
   items: MediaItem[]
   onOpen: (mediaId: number, time: number | null) => void
+  onEdit: (detection: Detection) => void
   onChanged: () => void
 }
 
-export function DetectionsPanel({ detections, items, onOpen, onChanged }: Props) {
+export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }: Props) {
   const [species, setSpecies] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [showAllSpecies, setShowAllSpecies] = useState(false)
@@ -43,13 +44,6 @@ export function DetectionsPanel({ detections, items, onOpen, onChanged }: Props)
       localStorage.setItem('detections-collapsed', c ? '0' : '1')
       return !c
     })
-  }
-
-  async function rename(d: Detection) {
-    const next = prompt('שם המין (באנגלית, כמו ב-SpeciesNet):', d.species)
-    if (!next?.trim() || next.trim() === d.species) return
-    await api.correctDetection(d.id, next.trim())
-    onChanged()
   }
 
   return (
@@ -132,15 +126,16 @@ export function DetectionsPanel({ detections, items, onOpen, onChanged }: Props)
                 >
                   <button className="det-main" onClick={() => onOpen(d.media_id, d.start_time)}>
                     <strong>{d.display}</strong>
+                    {d.source === 'manual' && <span className="soon">ידני</span>}
                     {d.corrected && <span className="soon">תוקן</span>}
                     <span className="muted small" dir="ltr">
                       {names.get(d.media_id) ?? ''}
                       {d.start_time != null &&
                         ` · ${formatDuration(d.start_time)}–${formatDuration(d.end_time)}`}
-                      {` · ${Math.round(d.confidence * 100)}%`}
+                      {d.source !== 'manual' && ` · ${Math.round(d.confidence * 100)}%`}
                     </span>
                   </button>
-                  <button className="icon" aria-label="תיקון מין" onClick={() => void rename(d)}>
+                  <button className="icon" aria-label="עריכת זיהוי" onClick={() => onEdit(d)}>
                     ✎
                   </button>
                   <button

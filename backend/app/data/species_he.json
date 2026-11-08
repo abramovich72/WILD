@@ -2,6 +2,7 @@
   "human": "אדם",
   "vehicle": "רכב",
   "animal": "חיה",
+  "unknown animal": "חיה לא מזוהה",
   "golden jackal": "תן זהוב",
   "jackal": "תן",
   "side-striped jackal": "תן פסים",
@@ -83,5 +84,6 @@
   "herpestes species": "מיני נמיות",
   "cercopithecidae family": "משפחת הקופים החדשים",
   "passeriformes order": "סדרת העופות השיריים",
-  "corvidae family": "משפחת העורביים"
+  "corvidae family": "משפחת העורביים",
+  "european hare": "ארנבת אירופית"
 }

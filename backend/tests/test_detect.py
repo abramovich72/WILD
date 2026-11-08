@@ -165,6 +165,122 @@ def test_video_events_and_delete_cascade(client, tmp_path, fake_model):
     assert client.get(f"/api/projects/{pid}/detections").json() == []
 
 
+def test_manual_detection_create_edit_and_time_validation(client, tmp_path):
+    _, image_id = project_with(client, tmp_path, "a.jpg", make_image)
+    species = client.get("/api/species").json()
+    assert any(option["species"] == "unknown animal" for option in species)
+
+    created = client.post(
+        f"/api/media/{image_id}/detections",
+        json={"species": "unknown animal"},
+    )
+    assert created.status_code == 201
+    detection = created.json()
+    assert detection["source"] == "manual"
+    assert detection["confidence"] == 0
+    assert detection["display"] == "חיה לא מזוהה"
+    assert detection["start_time"] is None and detection["end_time"] is None
+
+    edited = client.patch(
+        f"/api/detections/{detection['id']}", json={"species": "silver fox"}
+    )
+    assert edited.status_code == 200
+    assert edited.json()["species"] == "silver fox"
+    assert edited.json()["display"] == "silver fox"
+    assert edited.json()["source"] == "manual"
+    assert client.patch(
+        f"/api/detections/{detection['id']}", json={"start_time": 1}
+    ).status_code == 422
+
+    _, video_id = project_with(
+        client, tmp_path, "v.mp4", lambda p: make_video(p, seconds=6)
+    )
+    video_detection = client.post(
+        f"/api/media/{video_id}/detections",
+        json={"species": "fox", "start_time": 1.5, "end_time": 2.5},
+    )
+    assert video_detection.status_code == 201
+    assert video_detection.json()["start_time"] == 1.5
+
+    updated = client.patch(
+        f"/api/detections/{video_detection.json()['id']}",
+        json={"species": "red fox", "start_time": 2, "end_time": 3},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["species"] == "red fox"
+    assert updated.json()["start_time"] == 2
+    assert updated.json()["end_time"] == 3
+
+    invalid = client.patch(
+        f"/api/detections/{video_detection.json()['id']}",
+        json={"start_time": None, "end_time": None},
+    )
+    assert invalid.status_code == 422
+
+    invalid = client.post(
+        f"/api/media/{video_id}/detections",
+        json={"species": "fox", "start_time": -1, "end_time": 2},
+    )
+    assert invalid.status_code == 422
+    invalid = client.post(
+        f"/api/media/{video_id}/detections",
+        json={"species": "fox", "start_time": 5, "end_time": 7},
+    )
+    assert invalid.status_code == 422
+
+
+def test_manual_detection_survives_rerun_without_correction_option(
+    client, tmp_path, fake_model
+):
+    pid, mid = project_with(client, tmp_path, "a.jpg", make_image)
+    created = client.post(
+        f"/api/media/{mid}/detections", json={"species": "golden jackal"}
+    )
+    assert created.status_code == 201
+
+    client.post(
+        f"/api/projects/{pid}/detect",
+        json={"force": True, "keep_corrections": False},
+    )
+    wait_status(client, pid, mid, {"done"})
+    detections = client.get(f"/api/projects/{pid}/detections").json()
+    assert len(detections) == 1
+    assert detections[0]["source"] == "manual"
+    assert detections[0]["confidence"] == 0
+
+
+def test_existing_database_migration_marks_detections_as_speciesnet(
+    tmp_path, monkeypatch
+):
+    from sqlmodel import create_engine
+
+    from app import db
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
+    with engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE mediaitem (id INTEGER PRIMARY KEY)")
+        conn.exec_driver_sql(
+            "CREATE TABLE detection (id INTEGER PRIMARY KEY, media_id INTEGER, "
+            "species VARCHAR NOT NULL, confidence FLOAT NOT NULL)"
+        )
+        conn.exec_driver_sql(
+            "CREATE TABLE clip (id INTEGER PRIMARY KEY, status VARCHAR, error VARCHAR)"
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO detection (id, media_id, species, confidence) "
+            "VALUES (1, 1, 'fox', 0.9)"
+        )
+    monkeypatch.setattr(db, "engine", engine)
+
+    db._add_missing_columns()
+
+    with engine.connect() as conn:
+        source = conn.exec_driver_sql(
+            "SELECT source FROM detection WHERE id=1"
+        ).scalar_one()
+    assert source == "speciesnet"
+
+
 def test_failure_keeps_old_results_and_allows_retry(client, tmp_path, fake_model):
     pid, mid = project_with(client, tmp_path, "a.jpg", make_image)
     client.post(f"/api/projects/{pid}/detect", json={})

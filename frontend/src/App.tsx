@@ -12,6 +12,7 @@ import {
 import { formatDuration } from './format'
 import { ClipsPanel } from './components/ClipsPanel'
 import { DetectionsPanel } from './components/DetectionsPanel'
+import { DetectionEditor } from './components/DetectionEditor'
 import { DriveDialog } from './components/DriveDialog'
 import { MediaGrid } from './components/MediaGrid'
 import { SoundtrackPanel } from './components/Placeholders'
@@ -35,6 +36,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<'edit' | 'outputs'>('edit')
   const [error, setError] = useState('')
   const [detections, setDetections] = useState<Detection[]>([])
+  const [detectionEditor, setDetectionEditor] = useState<{ detection: Detection | null } | null>(null)
+  const [previewTime, setPreviewTime] = useState(0)
   const [progress, setProgress] = useState<Record<number, number | null>>({})
   const [seek, setSeek] = useState<{ time: number; n: number } | null>(null)
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -136,7 +139,14 @@ function App() {
     const best = new Map<number, Detection>()
     for (const d of detections) {
       const cur = best.get(d.media_id)
-      if (!cur || d.confidence > cur.confidence) best.set(d.media_id, d)
+      const priority = (item: Detection) =>
+        item.source === 'manual' ? 2 : item.corrected ? 1 : 0
+      if (
+        !cur ||
+        priority(d) > priority(cur) ||
+        (priority(d) === priority(cur) && d.confidence > cur.confidence)
+      )
+        best.set(d.media_id, d)
     }
     return new Map([...best].map(([id, d]) => [id, d.display]))
   }, [detections])
@@ -151,6 +161,11 @@ function App() {
     (m) => m.detect_status === 'pending' || m.detect_status === 'failed',
   ).length
   const detectionTargets = checked.size > 0 ? [...checked] : selected ? [selected.id] : []
+  const editorMedia = detectionEditor
+    ? items.find(
+        (item) => item.id === (detectionEditor.detection?.media_id ?? selectedId),
+      ) ?? null
+    : null
 
   async function rename(name: string) {
     setEditing(false)
@@ -357,17 +372,32 @@ function App() {
             <section className="panel">
               <div className="row between">
                 <h2>תצוגה מקדימה</h2>
-                <div className="segmented">
-                  <span className="seg disabled">המיקס הערוך</span>
-                  <span className="seg active">מקור</span>
+                <div className="row">
+                  <button
+                    className="filter"
+                    disabled={!selected}
+                    onClick={() => setDetectionEditor({ detection: null })}
+                  >
+                    + הוסף זיהוי
+                  </button>
+                  <div className="segmented">
+                    <span className="seg disabled">המיקס הערוך</span>
+                    <span className="seg active">מקור</span>
+                  </div>
                 </div>
               </div>
-              <Preview item={selected} detections={detections} seek={seek} />
+              <Preview
+                item={selected}
+                detections={detections}
+                seek={seek}
+                onTimeUpdate={setPreviewTime}
+              />
             </section>
             <DetectionsPanel
               detections={detections}
               items={items}
               onChanged={() => project && void refresh(project.id)}
+              onEdit={(detection) => setDetectionEditor({ detection })}
               onOpen={(id, time) => {
                 setSelectedId(id)
                 if (time != null) setSeek((s) => ({ time, n: (s?.n ?? 0) + 1 }))
@@ -406,6 +436,19 @@ function App() {
             onTransition={setTransition}
           />
         </main>
+        )}
+
+        {detectionEditor && editorMedia && (
+          <DetectionEditor
+            item={editorMedia}
+            detection={detectionEditor.detection}
+            initialTime={previewTime}
+            onClose={() => setDetectionEditor(null)}
+            onSaved={() => {
+              setDetectionEditor(null)
+              void refresh(project.id)
+            }}
+          />
         )}
 
         <footer className="foot muted small">

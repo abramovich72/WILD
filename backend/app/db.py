@@ -24,6 +24,13 @@ def _add_missing_columns() -> None:
         if "drive_id" not in cols:
             conn.exec_driver_sql("ALTER TABLE mediaitem ADD COLUMN drive_id VARCHAR")
             conn.exec_driver_sql("CREATE INDEX ix_mediaitem_drive_id ON mediaitem (drive_id)")
+        detection_cols = {
+            r[1] for r in conn.exec_driver_sql("PRAGMA table_info(detection)")
+        }
+        if "source" not in detection_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE detection ADD COLUMN source VARCHAR DEFAULT 'speciesnet' NOT NULL"
+            )
         # Jobs interrupted by a restart go back to pending.
         conn.exec_driver_sql(
             "UPDATE mediaitem SET detect_status='pending' "

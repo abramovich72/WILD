@@ -2,9 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type Detection, type MediaItem } from '../api'
 import { formatDuration, formatSize } from '../format'
 
-type Props = { item: MediaItem | null; detections: Detection[]; seek: { time: number; n: number } | null }
+type Props = {
+  item: MediaItem | null
+  detections: Detection[]
+  seek: { time: number; n: number } | null
+  onTimeUpdate?: (time: number) => void
+}
 
-export function Preview({ item, detections, seek }: Props) {
+export function Preview({ item, detections, seek, onTimeUpdate }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const [now, setNow] = useState(0)
 
@@ -32,7 +37,11 @@ export function Preview({ item, detections, seek }: Props) {
             src={src}
             controls
             preload="metadata"
-            onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
+            onTimeUpdate={(e) => {
+              const time = e.currentTarget.currentTime
+              setNow(time)
+              onTimeUpdate?.(time)
+            }}
             onLoadedMetadata={(e) => {
               if (seek) e.currentTarget.currentTime = seek.time
             }}
