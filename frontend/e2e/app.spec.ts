@@ -252,6 +252,9 @@ test('loads the Hebrew RTL interface without horizontal overflow', async ({ page
   await mockApi(page)
   await openApp(page)
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+  await expect
+    .poll(async () => (await page.locator('.detect-box').boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(180)
 
   for (const viewport of [
     { width: 1440, height: 900 },
