@@ -354,10 +354,14 @@ test('filters detections that have no identified species', async ({ page }) => {
   ]
   await openApp(page)
 
-  await page.getByRole('button', { name: 'לא זוהו · 2' }).click()
-  await expect(page.locator('.det-main')).toHaveCount(2)
-  await expect(page.locator('.det-main').nth(0)).toContainText('חיה')
-  await expect(page.locator('.det-main').nth(1)).toContainText('חיה לא מזוהה')
+  await page.getByRole('button', { name: 'לא זוהו · 1' }).click()
+  await expect(page.locator('.det-main')).toHaveCount(1)
+  await expect(page.locator('.det-main').first()).toContainText('חיה לא מזוהה')
+  await expect(page.locator('.det-main').first()).not.toContainText('animal.jpg')
+
+  await page.getByRole('button', { name: 'חיה · 1' }).click()
+  await expect(page.locator('.det-main')).toHaveCount(1)
+  await expect(page.locator('.det-main').first()).toContainText('animal.jpg')
 
   await page.getByRole('button', { name: 'הכל · 3' }).click()
   await expect(page.locator('.det-main')).toHaveCount(3)

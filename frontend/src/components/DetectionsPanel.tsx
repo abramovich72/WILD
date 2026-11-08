@@ -4,7 +4,7 @@ import { formatDuration } from '../format'
 
 const COMMON_SPECIES_LIMIT = 6
 const UNIDENTIFIED_FILTER = '__unidentified__'
-const UNIDENTIFIED_SPECIES = new Set(['animal', 'unknown animal'])
+const UNIDENTIFIED_SPECIES = new Set(['unknown animal'])
 
 type Props = {
   detections: Detection[]
