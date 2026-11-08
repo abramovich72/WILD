@@ -255,12 +255,23 @@ test('loads the Hebrew RTL interface without horizontal overflow', async ({ page
 
   for (const viewport of [
     { width: 1440, height: 900 },
+    { width: 768, height: 1024 },
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport)
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true)
+    if (viewport.width === 768) {
+      await expect
+        .poll(
+          () =>
+            page.locator('.grid').evaluate((grid) =>
+              getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+            ),
+        )
+        .toBeGreaterThanOrEqual(3)
+    }
   }
 })
 

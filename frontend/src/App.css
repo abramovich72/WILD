@@ -231,7 +231,7 @@ button.primary:disabled {
   .library-panel {
     position: sticky;
     top: 16px;
-    max-height: calc(60vh - 19px);
+    max-height: calc(80vh - 19px);
     overflow: hidden;
   }
 
@@ -259,7 +259,7 @@ button.primary:disabled {
 
 @media (max-width: 1120px) {
   .library .grid {
-    max-height: 55vh;
+    max-height: 80vh;
     overflow-y: auto;
     overscroll-behavior: contain;
     align-content: start;
@@ -603,8 +603,14 @@ button.primary:disabled {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .card {
