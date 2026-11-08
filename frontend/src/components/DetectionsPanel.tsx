@@ -3,6 +3,8 @@ import { api, type Detection, type MediaItem } from '../api'
 import { formatDuration } from '../format'
 
 const COMMON_SPECIES_LIMIT = 6
+const UNIDENTIFIED_FILTER = '__unidentified__'
+const UNIDENTIFIED_SPECIES = new Set(['animal', 'unknown animal'])
 
 type Props = {
   detections: Detection[]
@@ -23,19 +25,28 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
   const sortedCounts = [...counts].sort(
     ([a, countA], [b, countB]) => countB - countA || a.localeCompare(b, 'he'),
   )
+  const unidentifiedCount = detections.filter((d) =>
+    UNIDENTIFIED_SPECIES.has(d.species.trim().toLocaleLowerCase()),
+  ).length
   const query = search.trim().toLocaleLowerCase()
   const matchingCounts = sortedCounts.filter(([name]) =>
     name.toLocaleLowerCase().includes(query),
   )
   const visibleCounts: [string, number][] =
     query || showAllSpecies ? matchingCounts : sortedCounts.slice(0, COMMON_SPECIES_LIMIT)
-  const selectedCount = species && !query ? sortedCounts.find(([name]) => name === species) : null
+  const selectedCount =
+    species && species !== UNIDENTIFIED_FILTER && !query
+      ? sortedCounts.find(([name]) => name === species)
+      : null
   if (selectedCount && !visibleCounts.some(([name]) => name === species)) {
     visibleCounts.push(selectedCount)
   }
   const shown = detections.filter(
     (d) =>
-      (!species || d.display === species) &&
+      (!species ||
+        (species === UNIDENTIFIED_FILTER
+          ? UNIDENTIFIED_SPECIES.has(d.species.trim().toLocaleLowerCase())
+          : d.display === species)) &&
       (!query || d.display.toLocaleLowerCase().includes(query)),
   )
 
@@ -81,6 +92,16 @@ export function DetectionsPanel({ detections, items, onOpen, onEdit, onChanged }
               >
                 הכל · {detections.length}
               </button>
+              {unidentifiedCount > 0 && (
+                <button
+                  className={`filter${species === UNIDENTIFIED_FILTER ? ' active' : ''}`}
+                  onClick={() =>
+                    setSpecies(species === UNIDENTIFIED_FILTER ? null : UNIDENTIFIED_FILTER)
+                  }
+                >
+                  לא זוהו · {unidentifiedCount}
+                </button>
+              )}
               {visibleCounts.map(([name, n]) => (
                 <button
                   key={name}
