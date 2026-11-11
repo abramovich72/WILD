@@ -1,16 +1,17 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { expect, test, type Page, type Route } from '@playwright/test'
-import type { Clip, Detection, MediaItem } from '../src/api'
+import type { Clip, Detection, MediaItem, Project } from '../src/api'
 
 const clipFixture = readFileSync(fileURLToPath(new URL('./fixtures/clip.mp4', import.meta.url)))
 const imageResponse = Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="100%" height="100%" fill="#234"/></svg>',
 )
 
-type Upload = { filename: string; size: number; offset: number }
+type Upload = { filename: string; size: number; offset: number; project_id: number }
 
 type MockState = {
+  projects: Project[]
   media: MediaItem[]
   detections: Detection[]
   clips: Clip[]
@@ -24,10 +25,11 @@ function mediaItem(
   filename: string,
   kind: MediaItem['kind'],
   detect_status: MediaItem['detect_status'] = 'pending',
+  project_id = 1,
 ): MediaItem {
   return {
     id,
-    project_id: 1,
+    project_id,
     filename,
     kind,
     thumb_name: null,
@@ -48,8 +50,13 @@ async function respondJson(route: Route, body: unknown, status = 200) {
   })
 }
 
-async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<MockState> {
+async function mockApi(
+  page: Page,
+  initialMedia: MediaItem[] = [],
+  initialProjects: Project[] = [{ id: 1, name: 'פרויקט בדיקה' }],
+): Promise<MockState> {
   const state: MockState = {
+    projects: initialProjects,
     media: initialMedia,
     detections: [],
     clips: [],
@@ -57,6 +64,7 @@ async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<Mock
     uploadInitCount: 0,
     lastClipRequest: null,
   }
+  let nextProjectId = Math.max(0, ...initialProjects.map((item) => item.id)) + 1
   let nextMediaId = Math.max(0, ...initialMedia.map((item) => item.id)) + 1
   let nextDetectionId = 1
   let nextUploadId = 1
@@ -69,7 +77,21 @@ async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<Mock
     const parts = path.split('/')
 
     if (method === 'GET' && path === '/api/projects') {
-      await respondJson(route, [{ id: 1, name: 'פרויקט בדיקה' }])
+      await respondJson(route, state.projects)
+    } else if (method === 'POST' && path === '/api/projects') {
+      const body = request.postDataJSON() as { name: string }
+      const project = { id: nextProjectId++, name: body.name }
+      state.projects.push(project)
+      await respondJson(route, project, 201)
+    } else if (method === 'PATCH' && /^\/api\/projects\/\d+$/.test(path)) {
+      const project = state.projects.find((item) => item.id === Number(parts[3]))
+      if (!project) {
+        await respondJson(route, { detail: 'Project not found' }, 404)
+      } else {
+        const body = request.postDataJSON() as { name: string }
+        project.name = body.name
+        await respondJson(route, project)
+      }
     } else if (method === 'GET' && path === '/api/species') {
       await respondJson(route, [
         { species: 'fox', display: 'שועל מצוי' },
@@ -82,13 +104,22 @@ async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<Mock
         connected: false,
         email: null,
       })
-    } else if (method === 'GET' && path === '/api/projects/1/media') {
-      await respondJson(route, state.media)
-    } else if (method === 'GET' && path === '/api/projects/1/detections') {
-      await respondJson(route, state.detections)
-    } else if (method === 'POST' && path === '/api/projects/1/detect') {
+    } else if (method === 'GET' && /^\/api\/projects\/\d+\/media$/.test(path)) {
+      await respondJson(
+        route,
+        state.media.filter((item) => item.project_id === Number(parts[3])),
+      )
+    } else if (method === 'GET' && /^\/api\/projects\/\d+\/detections$/.test(path)) {
+      const projectMediaIds = new Set(
+        state.media.filter((item) => item.project_id === Number(parts[3])).map((item) => item.id),
+      )
+      await respondJson(route, state.detections.filter((item) => projectMediaIds.has(item.media_id)))
+    } else if (method === 'POST' && /^\/api\/projects\/\d+\/detect$/.test(path)) {
       const body = request.postDataJSON() as { media_ids?: number[] }
-      const selected = body.media_ids ?? state.media.map((item) => item.id)
+      const projectId = Number(parts[3])
+      const selected = body.media_ids ?? state.media
+        .filter((item) => item.project_id === projectId)
+        .map((item) => item.id)
       state.media = state.media.map((item) =>
         selected.includes(item.id) ? { ...item, detect_status: 'done' } : item,
       )
@@ -150,8 +181,8 @@ async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<Mock
         if (body.end_time !== undefined) detection.end_time = body.end_time
         await respondJson(route, detection)
       }
-    } else if (method === 'GET' && path === '/api/projects/1/detect/events') {
-      const snapshot = state.media.map((item) => ({
+    } else if (method === 'GET' && /^\/api\/projects\/\d+\/detect\/events$/.test(path)) {
+      const snapshot = state.media.filter((item) => item.project_id === Number(parts[3])).map((item) => ({
         id: item.id,
         status: item.detect_status,
         error: item.detect_error,
@@ -162,10 +193,10 @@ async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<Mock
         contentType: 'text/event-stream',
         body: `data: ${JSON.stringify(snapshot)}\n\nevent: idle\ndata: {}\n\n`,
       })
-    } else if (method === 'POST' && path === '/api/projects/1/uploads') {
+    } else if (method === 'POST' && /^\/api\/projects\/\d+\/uploads$/.test(path)) {
       const body = request.postDataJSON() as { filename: string; size: number }
       const id = `upload-${nextUploadId++}`
-      state.uploads.set(id, { ...body, offset: 0 })
+      state.uploads.set(id, { ...body, offset: 0, project_id: Number(parts[3]) })
       state.uploadInitCount += 1
       await respondJson(route, { upload_id: id }, 201)
     } else if (parts[1] === 'api' && parts[2] === 'uploads' && method === 'PUT') {
@@ -191,15 +222,15 @@ async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<Mock
       } else {
         const kind = /\.(mp4|mov|avi|mkv|webm)$/i.test(upload.filename) ? 'video' : 'image'
         const item = {
-          ...mediaItem(nextMediaId++, upload.filename, kind),
+          ...mediaItem(nextMediaId++, upload.filename, kind, 'pending', upload.project_id),
           size_bytes: upload.size,
         }
         state.media.push(item)
         await respondJson(route, item, 201)
       }
-    } else if (method === 'GET' && path === '/api/projects/1/clips') {
+    } else if (method === 'GET' && /^\/api\/projects\/\d+\/clips$/.test(path)) {
       await respondJson(route, state.clips)
-    } else if (method === 'POST' && path === '/api/projects/1/clips') {
+    } else if (method === 'POST' && /^\/api\/projects\/\d+\/clips$/.test(path)) {
       const spec = request.postDataJSON() as Clip['spec']
       state.lastClipRequest = spec
       const clip: Clip = {
@@ -243,10 +274,53 @@ async function mockApi(page: Page, initialMedia: MediaItem[] = []): Promise<Mock
   return state
 }
 
-async function openApp(page: Page) {
+async function openProjects(page: Page) {
   await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'בחירת פרויקט' })).toBeVisible()
+}
+
+async function openApp(page: Page) {
+  await openProjects(page)
+  await page.getByRole('button', { name: 'פתיחת פרויקט' }).first().click()
   await expect(page.getByRole('heading', { name: 'המדיה שלך' })).toBeVisible()
 }
+
+test('switches projects and keeps their media separate', async ({ page }) => {
+  await mockApi(
+    page,
+    [
+      mediaItem(1, 'first-project.jpg', 'image', 'pending', 1),
+      mediaItem(2, 'second-project.jpg', 'image', 'pending', 2),
+    ],
+    [
+      { id: 1, name: 'פרויקט ראשון' },
+      { id: 2, name: 'פרויקט שני' },
+    ],
+  )
+  await openProjects(page)
+
+  await page.getByRole('button', { name: 'פתיחת פרויקט' }).nth(1).click()
+  await expect(page.locator('header h1')).toContainText('פרויקט שני')
+  await expect(page.locator('.grid .card')).toContainText('second-project.jpg')
+  await expect(page.locator('.grid .card')).not.toContainText('first-project.jpg')
+
+  await page.getByRole('button', { name: 'בחירת פרויקט' }).click()
+  await page.getByRole('button', { name: 'פתיחת פרויקט' }).first().click()
+  await expect(page.locator('header h1')).toContainText('פרויקט ראשון')
+  await expect(page.locator('.grid .card')).toContainText('first-project.jpg')
+  await expect(page.locator('.grid .card')).not.toContainText('second-project.jpg')
+})
+
+test('creates a project and opens it', async ({ page }) => {
+  const state = await mockApi(page, [], [])
+  await openProjects(page)
+
+  await page.getByLabel('יצירת פרויקט חדש').fill('סקר חורף')
+  await page.getByRole('button', { name: 'יצירת פרויקט' }).click()
+
+  await expect(page.locator('header h1')).toContainText('סקר חורף')
+  expect(state.projects).toEqual([{ id: 1, name: 'סקר חורף' }])
+})
 
 test('loads the Hebrew RTL interface without horizontal overflow', async ({ page }) => {
   await mockApi(page)
@@ -459,6 +533,8 @@ test('persists the timeline, renders a clip, and supports playback, download, an
   await expect(page.locator('.timeline-strip .clip')).toHaveCount(1)
 
   await page.reload()
+  await expect(page.getByRole('heading', { name: 'בחירת פרויקט' })).toBeVisible()
+  await page.getByRole('button', { name: 'פתיחת פרויקט' }).first().click()
   await expect(page.locator('.timeline-strip .clip')).toHaveCount(1)
 
   await page.getByRole('button', { name: /כותרות פתיחה וסיום/ }).click()

@@ -26,7 +26,13 @@ const uid = () => Math.random().toString(36).slice(2)
 const timelineKey = (projectId: number) => `timeline:${projectId}`
 
 function App() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectsLoaded, setProjectsLoaded] = useState(false)
   const [project, setProject] = useState<Project | null>(null)
+  const [projectLoading, setProjectLoading] = useState(false)
+  const [projectError, setProjectError] = useState('')
+  const [newProjectName, setNewProjectName] = useState('')
+  const [creatingProject, setCreatingProject] = useState(false)
   const [items, setItems] = useState<MediaItem[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [checked, setChecked] = useState<Set<number>>(new Set())
@@ -92,34 +98,23 @@ function App() {
   }
 
   useEffect(() => {
-    ;(async () => {
-      try {
-        const list = await api.projects()
-        const p = list[0] ?? (await api.createProject('הפרויקט שלי'))
-        setProject(p)
-        const [media] = await Promise.all([
-          api.media(p.id).then((m) => {
-            setItems(m)
-            return m
-          }),
-          api.detections(p.id).then(setDetections),
-          api.clips(p.id).then(setClips),
-        ])
-        try {
-          const saved: TimelineItem[] = JSON.parse(localStorage.getItem(timelineKey(p.id)) ?? '[]')
-          const ids = new Set(media.map((m) => m.id))
-          setTimeline(saved.filter((t) => ids.has(t.media_id)))
-        } catch {
-          setTimeline([])
-        }
-        timelineLoaded.current = true
-        if (media.some((m) => m.detect_status === 'queued' || m.detect_status === 'running'))
-          listen(p.id)
-      } catch {
-        setError('לא ניתן להתחבר לשרת')
-      }
-    })()
-    return () => source.current?.close()
+    let cancelled = false
+    void api
+      .projects()
+      .then((list) => {
+        if (!cancelled) setProjects(list)
+      })
+      .catch(() => {
+        if (!cancelled) setError('לא ניתן להתחבר לשרת')
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoaded(true)
+      })
+    return () => {
+      cancelled = true
+      source.current?.close()
+      source.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -133,6 +128,96 @@ function App() {
     const id = setInterval(() => void api.clips(project.id).then(setClips).catch(() => {}), 1000)
     return () => clearInterval(id)
   }, [project, rendersActive])
+
+  async function openProject(next: Project) {
+    source.current?.close()
+    source.current = null
+    timelineLoaded.current = false
+    setProject(null)
+    setProjectLoading(true)
+    setProjectError('')
+    setItems([])
+    setDetections([])
+    setClips([])
+    setTimeline([])
+    setSelectedId(null)
+    setChecked(new Set())
+    setProgress({})
+    setSeek(null)
+    setDetectionEditor(null)
+    setEditing(false)
+    setActiveTab('edit')
+    setNote('')
+    setShowDrive(false)
+
+    try {
+      const [media, dets, projectClips] = await Promise.all([
+        api.media(next.id),
+        api.detections(next.id),
+        api.clips(next.id),
+      ])
+      let saved: TimelineItem[] = []
+      try {
+        saved = JSON.parse(localStorage.getItem(timelineKey(next.id)) ?? '[]')
+      } catch {
+        saved = []
+      }
+      const mediaIds = new Set(media.map((m) => m.id))
+      setItems(media)
+      setDetections(dets)
+      setClips(projectClips)
+      setTimeline(saved.filter((item) => mediaIds.has(item.media_id)))
+      setProject(next)
+      timelineLoaded.current = true
+      if (media.some((m) => m.detect_status === 'queued' || m.detect_status === 'running'))
+        listen(next.id)
+    } catch {
+      setProjectError('לא ניתן לטעון את הפרויקט')
+    } finally {
+      setProjectLoading(false)
+    }
+  }
+
+  function showProjects() {
+    source.current?.close()
+    source.current = null
+    timelineLoaded.current = false
+    setProject(null)
+    setItems([])
+    setDetections([])
+    setClips([])
+    setTimeline([])
+    setSelectedId(null)
+    setChecked(new Set())
+    setProgress({})
+    setSeek(null)
+    setDetectionEditor(null)
+    setEditing(false)
+    setActiveTab('edit')
+    setNote('')
+    setShowDrive(false)
+    setProjectError('')
+  }
+
+  async function createProject() {
+    const name = newProjectName.trim()
+    if (!name) {
+      setProjectError('יש להזין שם לפרויקט')
+      return
+    }
+    setCreatingProject(true)
+    setProjectError('')
+    try {
+      const created = await api.createProject(name)
+      setProjects((list) => [...list, created])
+      setNewProjectName('')
+      await openProject(created)
+    } catch {
+      setProjectError('לא ניתן ליצור את הפרויקט')
+    } finally {
+      setCreatingProject(false)
+    }
+  }
 
   const topSpecies = useMemo(() => {
     const best = new Map<number, Detection>()
@@ -151,7 +236,78 @@ function App() {
   }, [detections])
 
   if (error) return <p className="error page">{error}</p>
-  if (!project) return <p className="muted page">טוען…</p>
+  if (!projectsLoaded) return <p className="muted page">טוען פרויקטים…</p>
+  if (projectLoading) return <p className="muted page">טוען פרויקט…</p>
+
+  if (!project) {
+    return (
+      <div className="app">
+        <div className="page">
+          <header className="head">
+            <div className="title-block">
+              <img className="brand-logo" src="/wild-clips-logo.png" alt="WILD Clips" />
+              <div>
+                <div className="breadcrumb">ניהול פרויקטים</div>
+                <h1>בחירת פרויקט</h1>
+              </div>
+            </div>
+          </header>
+          <main className="projects-home">
+            <section className="panel">
+              <div className="project-home-intro">
+                <h2>הפרויקטים שלך</h2>
+                <p className="muted small">בחר פרויקט כדי לנהל את הקבצים והתוצרים שלו.</p>
+              </div>
+              <form
+                className="project-create"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void createProject()
+                }}
+              >
+                <label htmlFor="new-project-name">יצירת פרויקט חדש</label>
+                <div className="project-create-controls">
+                  <input
+                    id="new-project-name"
+                    value={newProjectName}
+                    maxLength={120}
+                    onChange={(event) => setNewProjectName(event.target.value)}
+                    placeholder="שם הפרויקט"
+                  />
+                  <button className="primary" type="submit" disabled={creatingProject}>
+                    {creatingProject ? 'יוצר…' : 'יצירת פרויקט'}
+                  </button>
+                </div>
+              </form>
+              {projectError && <p className="error small">{projectError}</p>}
+            </section>
+            {projects.length === 0 ? (
+              <p className="muted center-text">עדיין אין פרויקטים. צור פרויקט כדי להתחיל.</p>
+            ) : (
+              <section className="project-grid" aria-label="רשימת פרויקטים">
+                {projects.map((item) => (
+                  <article className="panel project-card" key={item.id}>
+                    <div>
+                      <h2>{item.name}</h2>
+                      <span className="muted small">פרויקט {item.id}</span>
+                    </div>
+                    <button
+                      className="primary"
+                      type="button"
+                      disabled={projectLoading}
+                      onClick={() => void openProject(item)}
+                    >
+                      פתיחת פרויקט
+                    </button>
+                  </article>
+                ))}
+              </section>
+            )}
+          </main>
+        </div>
+      </div>
+    )
+  }
 
   const selected = items.find((m) => m.id === selectedId) ?? null
   const active = items.filter((m) => m.detect_status === 'queued' || m.detect_status === 'running')
@@ -169,7 +325,9 @@ function App() {
   async function rename(name: string) {
     setEditing(false)
     if (!project || !name.trim() || name === project.name) return
-    setProject(await api.renameProject(project.id, name))
+    const renamed = await api.renameProject(project.id, name)
+    setProject(renamed)
+    setProjects((list) => list.map((item) => (item.id === renamed.id ? renamed : item)))
   }
 
   function toggleChecked(id: number) {
@@ -273,6 +431,9 @@ function App() {
             </div>
           </div>
           <div className="head-actions">
+            <button className="filter" disabled={rendering} onClick={showProjects}>
+              בחירת פרויקט
+            </button>
             {activeTab === 'edit' ? (
               <button
                 className="primary"
