@@ -5,6 +5,7 @@ import {
   type DetectProgress,
   type Detection,
   type MediaItem,
+  type MusicStyle,
   type Project,
   type TimelineItem,
   type Transition,
@@ -53,6 +54,12 @@ function App() {
   const [closingTitle, setClosingTitle] = useState('')
   const [closingTitleSeconds, setClosingTitleSeconds] = useState(3)
   const [transition, setTransition] = useState<Transition>('fade')
+  const [musicEnabled, setMusicEnabled] = useState(false)
+  const [musicPrompt, setMusicPrompt] = useState(
+    'Calm instrumental music for a nature documentary, gentle strings and piano',
+  )
+  const [musicStyle, setMusicStyle] = useState<MusicStyle>('ambient')
+  const [musicVolume, setMusicVolume] = useState(75)
   const [clips, setClips] = useState<Clip[]>([])
   const [note, setNote] = useState('')
   const [rendering, setRendering] = useState(false)
@@ -372,6 +379,12 @@ function App() {
         closing_title: closingTitle,
         closing_title_seconds: closingTitleSeconds,
         transition,
+        music: {
+          enabled: musicEnabled,
+          prompt: musicPrompt,
+          style: musicStyle,
+          volume: musicVolume / 100,
+        },
       })
       setClips(await api.clips(project.id))
       setActiveTab('outputs')
@@ -604,6 +617,14 @@ function App() {
             onClosingTitleSeconds={setClosingTitleSeconds}
             transition={transition}
             onTransition={setTransition}
+            musicEnabled={musicEnabled}
+            onMusicEnabled={setMusicEnabled}
+            musicPrompt={musicPrompt}
+            onMusicPrompt={setMusicPrompt}
+            musicStyle={musicStyle}
+            onMusicStyle={setMusicStyle}
+            musicVolume={musicVolume}
+            onMusicVolume={setMusicVolume}
           />
         </main>
         )}

@@ -557,6 +557,11 @@ test('persists the timeline, renders a clip, and supports playback, download, an
   await page.getByRole('button', { name: /כותרות פתיחה וסיום/ }).click()
   await page.getByLabel('כותרת פתיחה').fill('חיות הבר')
   await page.locator('.settings select').selectOption('fade')
+  await page.getByLabel('הוסף מוזיקה').check()
+  await page.getByLabel('תיאור המוזיקה').fill('calm wildlife soundtrack')
+  await page.getByRole('button', { name: 'אקוסטי' }).click()
+  await page.getByLabel('עוצמת המוזיקה').fill('85')
+  await expect(page.getByRole('note')).toContainText('כשתי דקות ל־30 שניות')
   await page.getByRole('button', { name: 'הפקת סרטון' }).click()
 
   await expect(page.getByRole('heading', { name: 'התוצרים שלי' })).toBeVisible()
@@ -564,6 +569,12 @@ test('persists the timeline, renders a clip, and supports playback, download, an
     opening_title: 'חיות הבר',
     transition: 'fade',
     items: [{ media_id: 1 }],
+    music: {
+      enabled: true,
+      prompt: 'calm wildlife soundtrack',
+      style: 'acoustic',
+      volume: 0.85,
+    },
   })
 
   const player = page.locator('.clip-player')

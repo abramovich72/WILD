@@ -1,7 +1,11 @@
 import { useState } from 'react'
-import type { Transition } from '../api'
+import type { MusicStyle, Transition } from '../api'
 
-const STYLES = ['אלקטרוני', 'אקוסטי', 'אווירה']
+const STYLES: { value: MusicStyle; label: string }[] = [
+  { value: 'electronic', label: 'אלקטרוני' },
+  { value: 'acoustic', label: 'אקוסטי' },
+  { value: 'ambient', label: 'אווירה' },
+]
 
 type Props = {
   length: number
@@ -18,6 +22,14 @@ type Props = {
   onClosingTitleSeconds: (seconds: number) => void
   transition: Transition
   onTransition: (t: Transition) => void
+  musicEnabled: boolean
+  onMusicEnabled: (enabled: boolean) => void
+  musicPrompt: string
+  onMusicPrompt: (prompt: string) => void
+  musicStyle: MusicStyle
+  onMusicStyle: (style: MusicStyle) => void
+  musicVolume: number
+  onMusicVolume: (volume: number) => void
 }
 
 export function SettingsPanel({
@@ -35,9 +47,15 @@ export function SettingsPanel({
   onClosingTitleSeconds,
   transition,
   onTransition,
+  musicEnabled,
+  onMusicEnabled,
+  musicPrompt,
+  onMusicPrompt,
+  musicStyle,
+  onMusicStyle,
+  musicVolume,
+  onMusicVolume,
 }: Props) {
-  const [style, setStyle] = useState(STYLES[0])
-  const [volume, setVolume] = useState(110)
   const [titlesCollapsed, setTitlesCollapsed] = useState(
     () => localStorage.getItem('titles-collapsed') !== '0',
   )
@@ -148,41 +166,59 @@ export function SettingsPanel({
         </select>
       </section>
 
-      <section className="disabled" title="יופעל בשלב 4">
-        <h3>המוזיקה שלך</h3>
-        <label className="small muted">תיאור המוזיקה</label>
-        <textarea
-          disabled
-          rows={4}
-          defaultValue="אלקטרוניקה קצבית, אווירה מסתורית, ללא שירה"
-        />
-        <label className="small muted">סגנון</label>
-        <div className="style-options">
-          {STYLES.map((s) => (
-            <button key={s} className={`style${s === style ? ' active' : ''}`} onClick={() => setStyle(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="row between">
-          <span className="small muted">עוצמה</span>
-          <strong>{volume}%</strong>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={200}
-          value={volume}
-          onChange={(e) => setVolume(+e.target.value)}
-        />
-        <div className="options small">
-          <div>גלם</div>
-          <label><input type="checkbox" defaultChecked disabled /> מוזיקה</label>
-          <label><input type="checkbox" defaultChecked disabled /> אנימציה</label>
-          <div>אפקטים</div>
-          <label><input type="checkbox" disabled /> התאמת קצב</label>
-          <label><input type="checkbox" disabled /> Fade</label>
-        </div>
+      <section>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={musicEnabled}
+            onChange={(event) => onMusicEnabled(event.target.checked)}
+          />
+          <h3>הוסף מוזיקה</h3>
+        </label>
+        {musicEnabled && (
+          <div className="music-fields">
+            <label className="small muted" htmlFor="music-prompt">תיאור המוזיקה</label>
+            <textarea
+              id="music-prompt"
+              rows={4}
+              maxLength={500}
+              value={musicPrompt}
+              onChange={(event) => onMusicPrompt(event.target.value)}
+              placeholder="למשל: calm instrumental music for a nature documentary"
+            />
+            <span className="muted small">תיאור באנגלית בדרך כלל מניב תוצאות טובות יותר.</span>
+            <label className="small muted">סגנון</label>
+            <div className="style-options">
+              {STYLES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`style${option.value === musicStyle ? ' active' : ''}`}
+                  aria-pressed={option.value === musicStyle}
+                  onClick={() => onMusicStyle(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="row between">
+              <span className="small muted">עוצמת המוזיקה</span>
+              <strong>{musicVolume}%</strong>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={200}
+              value={musicVolume}
+              aria-label="עוצמת המוזיקה"
+              onChange={(event) => onMusicVolume(+event.target.value)}
+            />
+            <p className="music-notice muted small" role="note">
+              יצירת המוזיקה מתבצעת ברקע ועשויה להימשך כשתי דקות ל־30 שניות מוזיקה. ביצירה הראשונה
+              הורדת המודל עשויה להאריך את ההמתנה.
+            </p>
+          </div>
+        )}
       </section>
 
       <div className="settings-footer muted small">MP4 · 720p · 30fps</div>

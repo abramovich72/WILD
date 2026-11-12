@@ -2,3 +2,4 @@
 #   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 speciesnet
 audiocraft
+transformers<5

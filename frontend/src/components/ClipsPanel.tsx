@@ -40,9 +40,16 @@ export function ClipsPanel({ clips, onChanged }: { clips: Clip[]; onChanged: () 
                   {c.status === 'failed' && c.error && <span>{c.error}</span>}
                 </div>
                 {c.status === 'running' || c.status === 'queued' ? (
-                  <div className="bar">
-                    <i style={{ width: `${Math.round((c.progress ?? 0) * 100)}%` }} />
-                  </div>
+                  <>
+                    <div className="bar">
+                      <i style={{ width: `${Math.round((c.progress ?? 0) * 100)}%` }} />
+                    </div>
+                    {c.spec.music?.enabled && c.spec.music.volume > 0 && (
+                      <p className="music-notice muted small">
+                        יצירת המוזיקה מתבצעת ברקע ועשויה להימשך כמה דקות.
+                      </p>
+                    )}
+                  </>
                 ) : null}
                 <div className="row between clip-actions">
                   {c.status === 'done' ? (

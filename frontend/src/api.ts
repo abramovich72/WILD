@@ -50,6 +50,13 @@ export type TimelineItem = {
 }
 
 export type Transition = 'none' | 'fade'
+export type MusicStyle = 'electronic' | 'acoustic' | 'ambient'
+export type MusicSettings = {
+  enabled: boolean
+  prompt: string
+  style: MusicStyle
+  volume: number
+}
 
 export type DriveStatus = {
   enabled: boolean
@@ -143,6 +150,7 @@ export type Clip = {
     closing_title?: string
     closing_title_seconds?: number
     transition: Transition
+    music?: MusicSettings
   }
 }
 
@@ -208,6 +216,7 @@ export const api = {
       closing_title: string
       closing_title_seconds: number
       transition: Transition
+      music: MusicSettings
     },
   ) => fetch(`/api/projects/${projectId}/clips`, send('POST', body)).then(json<Clip>),
   clips: (projectId: number) => fetch(`/api/projects/${projectId}/clips`).then(json<Clip[]>),

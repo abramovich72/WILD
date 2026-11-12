@@ -12,7 +12,7 @@ from sqlmodel import Session
 from .. import db
 from ..models.media import Clip, MediaItem
 from . import clip as clip_service
-from . import ffmpeg, storage
+from . import cpu_jobs, ffmpeg, storage
 
 log = logging.getLogger("wild.render")
 
@@ -36,7 +36,8 @@ def _loop() -> None:
     while True:
         clip_id = _queue.get()
         try:
-            run_job(clip_id)
+            with cpu_jobs.CPU_JOB_LOCK:
+                run_job(clip_id)
         except Exception:  # keep the worker alive whatever happens
             log.exception("render job crashed")
         finally:
@@ -90,6 +91,7 @@ def run_job(clip_id: int) -> None:
             opening_title_seconds=spec.get("opening_title_seconds", 3.0),
             closing_title=spec.get("closing_title", ""),
             closing_title_seconds=spec.get("closing_title_seconds", 3.0),
+            music=spec.get("music"),
             on_progress=lambda f: PROGRESS.__setitem__(clip_id, f),
         )
         storage.ensure_capacity(0)

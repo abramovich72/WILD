@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 
 from .. import db
 from ..models.media import Detection, MediaItem
-from . import detect, storage
+from . import cpu_jobs, detect, storage
 
 log = logging.getLogger("wild.jobs")
 
@@ -40,7 +40,8 @@ def _loop() -> None:
     while True:
         job = _queue.get()
         try:
-            run_job(job)
+            with cpu_jobs.CPU_JOB_LOCK:
+                run_job(job)
         except Exception:  # keep the worker alive whatever happens
             log.exception("detection job crashed")
         finally:

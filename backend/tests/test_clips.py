@@ -1,5 +1,7 @@
+import json
 import subprocess
 import time
+import wave
 
 import pytest
 from helpers import make_image, make_video, upload
@@ -151,6 +153,59 @@ def test_render_clip_with_opening_and_closing_titles(client, project):
     assert clip["spec"]["closing_title_seconds"] == 2
 
 
+def test_render_clip_with_generated_music(client, project, monkeypatch):
+    from app.services import musicgen
+
+    pid, ids = project
+
+    def fake_generate_music(path, *, duration, prompt, style):
+        assert duration == pytest.approx(2)
+        assert prompt == "calm wildlife soundtrack"
+        assert style == "ambient"
+        with wave.open(str(path), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(32000)
+            wav.writeframes(b"\x00\x00" * (32000 * 2))
+
+    monkeypatch.setattr(musicgen, "generate_music", fake_generate_music)
+    response = client.post(
+        f"/api/projects/{pid}/clips",
+        json={
+            "items": [{"media_id": ids["v.mp4"], "start": 0, "end": 2}],
+            "music": {
+                "enabled": True,
+                "prompt": "calm wildlife soundtrack",
+                "style": "ambient",
+                "volume": 0.75,
+            },
+        },
+    )
+    assert response.status_code == 201
+    clip = wait_clip(client, pid, response.json()["id"])
+    assert clip["status"] == "done", clip["error"]
+    assert clip["spec"]["music"] == {
+        "enabled": True,
+        "prompt": "calm wildlife soundtrack",
+        "style": "ambient",
+        "volume": 0.75,
+    }
+
+    output = client.get(f"/api/clips/{clip['id']}/file")
+    assert output.status_code == 200
+    mp4 = next((settings.storage_dir / "projects" / str(pid) / "clips").glob("*.mp4"))
+    streams = json.loads(
+        subprocess.run(
+            [settings.ffprobe_path, "-v", "error", "-show_entries", "stream=codec_type",
+             "-of", "json", str(mp4)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )["streams"]
+    assert any(stream["codec_type"] == "audio" for stream in streams)
+
+
 def test_create_clip_validation(client, project):
     pid, ids = project
     url = f"/api/projects/{pid}/clips"
@@ -161,6 +216,13 @@ def test_create_clip_validation(client, project):
             "items": [{"media_id": ids["v.mp4"]}],
             "opening_title": "פתיחה",
             "opening_title_seconds": 61,
+        },
+    ).status_code == 422
+    assert client.post(
+        url,
+        json={
+            "items": [{"media_id": ids["v.mp4"], "start": 0, "end": 2}],
+            "music": {"enabled": True, "prompt": "   "},
         },
     ).status_code == 422
     assert client.post(url, json={"items": [{"media_id": 999}]}).status_code == 422

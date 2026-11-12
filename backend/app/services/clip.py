@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import settings
+from . import musicgen
 from .ffmpeg import try_remux_corrupt_avi
 
 WIDTH, HEIGHT, FPS = 1280, 720, 30
 MIN_PIECE = 1.0
 MIN_RENDER_PIECE = 0.2
 FADE_SECONDS = 0.4
+MUSIC_FADE_SECONDS = 1.5
 NON_ANIMALS = {"human", "vehicle"}
 
 
@@ -234,6 +236,7 @@ def render(
     opening_title_seconds: float = 3.0,
     closing_title: str = "",
     closing_title_seconds: float = 3.0,
+    music: dict | None = None,
     on_progress: Callable[[float], None] = lambda _f: None,
 ) -> None:
     if not segments:
@@ -248,6 +251,10 @@ def render(
     total = sum(s.duration for s in segments)
     total += opening_title_seconds if opening_title else 0
     total += closing_title_seconds if closing_title else 0
+    music = music or {}
+    include_music = bool(music.get("enabled")) and float(music.get("volume", 0)) > 0
+    video_out = tmp / "video-only.mp4" if include_music else out
+    render_progress_end = 0.72 if include_music else 0.98
     done = 0.0
     parts: list[Path] = []
 
@@ -261,7 +268,7 @@ def render(
             raise RuntimeError(f"{name} title produced no output")
         parts.append(part)
         done += seconds
-        on_progress(min(done / total, 0.98))
+        on_progress(min(done / total * render_progress_end, render_progress_end))
 
     if opening_title:
         add_title(opening_title, opening_title_seconds, "opening-title")
@@ -277,7 +284,7 @@ def render(
             raise RuntimeError(f"segment {i + 1} produced no output")
         parts.append(part)
         done += seg.duration
-        on_progress(min(done / total, 0.98))
+        on_progress(min(done / total * render_progress_end, render_progress_end))
 
     if closing_title:
         add_title(closing_title, closing_title_seconds, "closing-title")
@@ -289,7 +296,38 @@ def render(
     out.parent.mkdir(parents=True, exist_ok=True)
     _run([
         settings.ffmpeg_path, "-y", "-v", "error", "-f", "concat", "-safe", "0",
-        "-i", str(listing), "-c", "copy", "-movflags", "+faststart", str(out),
+        "-i", str(listing), "-c", "copy", "-movflags", "+faststart", str(video_out),
     ])
-    if not out.exists() or out.stat().st_size == 0:
+    if not video_out.exists() or video_out.stat().st_size == 0:
         raise RuntimeError("render produced no output")
+    if include_music:
+        on_progress(0.74)
+        music_path = tmp / "music.wav"
+        musicgen.generate_music(
+            music_path,
+            duration=total,
+            prompt=str(music.get("prompt", "")),
+            style=str(music.get("style", "ambient")),
+        )
+        if not music_path.exists() or music_path.stat().st_size == 0:
+            raise RuntimeError("MusicGen produced no audio")
+
+        fade_seconds = min(MUSIC_FADE_SECONDS, total / 2)
+        audio_filter = (
+            f"[1:a]volume={float(music['volume']):.3f},"
+            f"afade=t=in:st=0:d={fade_seconds:.3f},"
+            f"afade=t=out:st={max(0.0, total - fade_seconds):.3f}:d={fade_seconds:.3f},"
+            "alimiter=limit=0.95[music]"
+        )
+        _run([
+            settings.ffmpeg_path, "-y", "-v", "error",
+            "-i", str(video_out), "-stream_loop", "-1", "-i", str(music_path),
+            "-filter_complex", audio_filter,
+            "-map", "0:v:0", "-map", "[music]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-t", f"{total:.3f}", "-movflags", "+faststart", str(out),
+        ])
+        on_progress(0.99)
+        if not out.exists() or out.stat().st_size == 0:
+            raise RuntimeError("music mix produced no output")
+    on_progress(1.0)

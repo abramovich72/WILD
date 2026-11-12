@@ -866,6 +866,28 @@ input[type='range'] {
   color: var(--green);
 }
 
+.music-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.music-fields textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.music-notice {
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
 .options {
   display: grid;
   grid-template-columns: 1fr 1fr;

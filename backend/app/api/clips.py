@@ -30,6 +30,16 @@ class TimelineItemIn(BaseModel):
     label: str | None = None
 
 
+class MusicIn(BaseModel):
+    enabled: bool = False
+    prompt: str = Field(
+        "Calm instrumental music for a nature documentary, gentle strings and piano",
+        max_length=500,
+    )
+    style: Literal["electronic", "acoustic", "ambient"] = "ambient"
+    volume: float = Field(0.75, ge=0, le=2)
+
+
 class ClipIn(BaseModel):
     name: str = ""
     items: list[TimelineItemIn] = Field(min_length=1)
@@ -39,6 +49,7 @@ class ClipIn(BaseModel):
     closing_title: str = Field("", max_length=200)
     closing_title_seconds: float = Field(3.0, ge=1, le=60)
     transition: Literal["none", "fade"] = "none"
+    music: MusicIn = Field(default_factory=MusicIn)
 
 
 def _project(session: Session, project_id: int) -> Project:
@@ -132,6 +143,9 @@ def create_clip(project_id: int, body: ClipIn, session: Session = Depends(get_se
         )
     opening_title = body.opening_title.strip()
     closing_title = body.closing_title.strip()
+    music_prompt = body.music.prompt.strip()
+    if body.music.enabled and body.music.volume > 0 and not music_prompt:
+        raise HTTPException(422, "Music description cannot be empty")
     total = sum(i["end"] - i["start"] for i in items)
     total += (body.opening_title_seconds if opening_title else 0)
     total += (body.closing_title_seconds if closing_title else 0)
@@ -154,6 +168,12 @@ def create_clip(project_id: int, body: ClipIn, session: Session = Depends(get_se
                 "closing_title": closing_title,
                 "closing_title_seconds": body.closing_title_seconds,
                 "transition": body.transition,
+                "music": {
+                    "enabled": body.music.enabled,
+                    "prompt": music_prompt,
+                    "style": body.music.style,
+                    "volume": body.music.volume,
+                },
             },
             ensure_ascii=False,
         ),
