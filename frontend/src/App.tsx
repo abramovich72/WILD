@@ -24,6 +24,7 @@ import './App.css'
 const IMAGE_SECONDS = 3
 const uid = () => Math.random().toString(36).slice(2)
 const timelineKey = (projectId: number) => `timeline:${projectId}`
+const activeProjectKey = 'wild.activeProjectId'
 
 function App() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -101,8 +102,16 @@ function App() {
     let cancelled = false
     void api
       .projects()
-      .then((list) => {
-        if (!cancelled) setProjects(list)
+      .then(async (list) => {
+        if (cancelled) return
+        setProjects(list)
+        const savedProjectId = localStorage.getItem(activeProjectKey)
+        const savedProject = list.find((item) => String(item.id) === savedProjectId)
+        if (savedProject) {
+          await openProject(savedProject)
+        } else if (savedProjectId !== null) {
+          localStorage.removeItem(activeProjectKey)
+        }
       })
       .catch(() => {
         if (!cancelled) setError('לא ניתן להתחבר לשרת')
@@ -168,6 +177,7 @@ function App() {
       setClips(projectClips)
       setTimeline(saved.filter((item) => mediaIds.has(item.media_id)))
       setProject(next)
+      localStorage.setItem(activeProjectKey, String(next.id))
       timelineLoaded.current = true
       if (media.some((m) => m.detect_status === 'queued' || m.detect_status === 'running'))
         listen(next.id)

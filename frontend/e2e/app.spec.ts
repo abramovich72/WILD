@@ -301,14 +301,31 @@ test('switches projects and keeps their media separate', async ({ page }) => {
 
   await page.getByRole('button', { name: 'פתיחת פרויקט' }).nth(1).click()
   await expect(page.locator('header h1')).toContainText('פרויקט שני')
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('wild.activeProjectId')))
+    .toBe('2')
   await expect(page.locator('.grid .card')).toContainText('second-project.jpg')
   await expect(page.locator('.grid .card')).not.toContainText('first-project.jpg')
 
   await page.getByRole('button', { name: 'בחירת פרויקט' }).click()
   await page.getByRole('button', { name: 'פתיחת פרויקט' }).first().click()
   await expect(page.locator('header h1')).toContainText('פרויקט ראשון')
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('wild.activeProjectId')))
+    .toBe('1')
   await expect(page.locator('.grid .card')).toContainText('first-project.jpg')
   await expect(page.locator('.grid .card')).not.toContainText('second-project.jpg')
+})
+
+test('returns to project selection and clears the saved id when that project no longer exists', async ({
+  page,
+}) => {
+  await mockApi(page)
+  await page.addInitScript(() => localStorage.setItem('wild.activeProjectId', '999'))
+  await openProjects(page)
+
+  await expect(page.evaluate(() => localStorage.getItem('wild.activeProjectId'))).resolves.toBeNull()
+  await expect(page.getByRole('button', { name: 'פתיחת פרויקט' })).toHaveCount(1)
 })
 
 test('creates a project and opens it', async ({ page }) => {
@@ -533,8 +550,8 @@ test('persists the timeline, renders a clip, and supports playback, download, an
   await expect(page.locator('.timeline-strip .clip')).toHaveCount(1)
 
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'בחירת פרויקט' })).toBeVisible()
-  await page.getByRole('button', { name: 'פתיחת פרויקט' }).first().click()
+  await expect(page.getByRole('heading', { name: 'המדיה שלך' })).toBeVisible()
+  await expect(page.locator('header h1')).toContainText('פרויקט בדיקה')
   await expect(page.locator('.timeline-strip .clip')).toHaveCount(1)
 
   await page.getByRole('button', { name: /כותרות פתיחה וסיום/ }).click()
