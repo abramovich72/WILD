@@ -12,7 +12,7 @@ const uid = () => Math.random().toString(36).slice(2)
 
 const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300]
 
-// Proportional bar: one segment per timeline item, with second marks and the requested length.
+// Proportional bar: one segment per timeline item, with second marks and the target length.
 function SecondsRuler({
   timeline,
   length,
@@ -48,7 +48,7 @@ function SecondsRuler({
             </span>
           )
         })}
-        <span className="ruler-goal" style={{ insetInlineStart: pct(length) }} title={`אורך מבוקש: ${length} שנ׳`} />
+        <span className="ruler-goal" style={{ insetInlineStart: pct(length) }} title={`אורך יעד: ${length} שנ׳`} />
       </div>
       <div className="ruler-ticks">
         {ticks.map((s) => (
@@ -89,6 +89,7 @@ export function TimelinePanel({
   const [overUid, setOverUid] = useState<string | null>(null)
   const byId = new Map(media.map((m) => [m.id, m]))
   const total = timeline.reduce((sum, t) => sum + (t.end - t.start), 0)
+  const overTarget = total > length + 0.05
   const sel = timeline.find((t) => t.uid === selUid) ?? null
   const selMedia = sel ? byId.get(sel.media_id) : undefined
 
@@ -158,8 +159,12 @@ export function TimelinePanel({
     <section className="panel">
       <div className="row between">
         <h3>ציר הזמן</h3>
-        <span className={`small ${total > length + 0.05 ? 'over' : 'muted'}`}>
-          {sec(total)} מתוך {length} שנ׳ מבוקשות
+        <span
+          className={`timeline-duration small ${overTarget ? 'over' : 'muted'}`}
+          role={overTarget ? 'status' : undefined}
+        >
+          משך הציר: {sec(total)} · אורך יעד: {length} שנ׳
+          {overTarget && <> · אזהרה: חריגה של {sec(total - length)}</>}
         </span>
       </div>
 

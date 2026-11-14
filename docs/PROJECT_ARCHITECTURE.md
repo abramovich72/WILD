@@ -245,6 +245,6 @@ The backend tests use temporary SQLite databases and mock external Google servic
 - Timeline edits are browser-local and are not persisted to the backend.
 - Drive OAuth testing mode may require users to sign in again after token expiry. Public use of `drive.readonly` requires Google verification.
 - Google-native documents and Shared Drives as a browsing root are not supported.
-- MusicGen, soundtrack mixing, a full outputs/project-management UI, persistent job infrastructure, and cloud deployment remain planned/incomplete. See `GAPS.md` for current details.
+- A full outputs/project-management UI and persistent job infrastructure remain planned/incomplete. MusicGen and soundtrack mixing are implemented and deployed. See `GAPS.md` for current details.
 - Preserve Hebrew UI strings, RTL layout, existing API/type patterns, and the original source files when adding features.
 - Keep changes surgical; add tests for backend behavior and run the narrowest applicable checks, then expand validation as needed.

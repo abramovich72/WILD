@@ -71,7 +71,7 @@ export function SettingsPanel({
   return (
     <aside className="panel settings">
       <section>
-        <h3>אורך הסרטון</h3>
+        <h3>אורך יעד</h3>
         <div className="big-number">{length}</div>
         <span className="muted small center">שניות</span>
         <input

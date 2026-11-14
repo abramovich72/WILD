@@ -539,6 +539,33 @@ test('creates and edits a manual detection with custom species and video times',
   })
 })
 
+test('shows timeline duration against its target and warns when over', async ({ page }) => {
+  await mockApi(page, [
+    mediaItem(1, 'field-photo.jpg', 'image'),
+    mediaItem(2, 'field-photo-2.jpg', 'image'),
+  ])
+  await openApp(page)
+
+  await expect(page.getByRole('heading', { name: 'אורך יעד' })).toBeVisible()
+  const targetSlider = page.locator('.settings input[type="range"]').first()
+  await targetSlider.focus()
+  await targetSlider.press('Home')
+  await expect(page.locator('.settings .big-number')).toHaveText('5')
+
+  const duration = page.locator('.timeline-duration')
+  await expect(duration).toContainText('משך הציר: 0.0 שנ׳ · אורך יעד: 5 שנ׳')
+  await page.locator('.card').filter({ hasText: 'field-photo.jpg' }).click()
+  await page.getByRole('button', { name: /הוסף את הנבחר/ }).click()
+  await expect(duration).toContainText('משך הציר: 3.0 שנ׳')
+
+  await page.locator('.card').filter({ hasText: 'field-photo-2.jpg' }).click()
+  await page.getByRole('button', { name: /הוסף את הנבחר/ }).click()
+  await expect(duration).toContainText('משך הציר: 6.0 שנ׳')
+  await expect(duration).toContainText('אזהרה: חריגה של 1.0 שנ׳')
+  await expect(duration).toHaveAttribute('role', 'status')
+  await expect(duration).toHaveClass(/over/)
+})
+
 test('persists the timeline, renders a clip, and supports playback, download, and deletion', async ({
   page,
 }) => {
